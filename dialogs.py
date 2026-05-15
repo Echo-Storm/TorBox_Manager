@@ -22,6 +22,7 @@ import webbrowser
 from PyQt6.QtCore    import Qt
 from PyQt6.QtGui     import QFont
 from PyQt6.QtWidgets import (
+    QApplication,
     QCheckBox,
     QDialog,
     QDialogButtonBox,
@@ -42,6 +43,7 @@ from constants import (
     APP_SUBTITLE,
     APP_VERSION,
     COLOR_ACCENT,
+    COLOR_ACCENT_DIM,
     COLOR_BG,
     COLOR_BORDER,
     COLOR_BUTTON_BG,
@@ -142,6 +144,61 @@ def _apply_dialog_style(dialog: QDialog):
     dialog.setFont(QFont(FONT_UI_FAMILY, FONT_UI_SIZE))
 
 
+def _make_paste_btn(target_input: QLineEdit) -> QPushButton:
+    """
+    Return a small Paste button that writes clipboard text into target_input.
+
+    Styled to sit flush against the input field without drawing attention —
+    muted border at rest, accent on hover, same height as the input.
+    The button is disabled when the clipboard contains no text.
+    """
+    btn = QPushButton("📋 Paste")
+    btn.setFixedHeight(30)
+    btn.setFixedWidth(72)
+    btn.setCursor(Qt.CursorShape.PointingHandCursor)
+    btn.setStyleSheet(f"""
+        QPushButton {{
+            background-color: transparent;
+            color: {COLOR_ACCENT};
+            border: 1px solid {COLOR_ACCENT_DIM};
+            border-radius: 3px;
+            font-size: 8pt;
+            padding: 0 6px;
+        }}
+        QPushButton:hover {{
+            background-color: {COLOR_ACCENT};
+            color: #000000;
+            border-color: {COLOR_ACCENT};
+        }}
+        QPushButton:pressed {{
+            background-color: {COLOR_ACCENT};
+            color: #000000;
+        }}
+        QPushButton:disabled {{
+            color: #333333;
+            border-color: {COLOR_BORDER};
+        }}
+    """)
+
+    def _do_paste():
+        cb   = QApplication.clipboard()
+        text = cb.text().strip()
+        if text:
+            target_input.setText(text)
+            target_input.setFocus()
+
+    def _update_state():
+        btn.setEnabled(bool(QApplication.clipboard().text().strip()))
+
+    btn.clicked.connect(_do_paste)
+    # Re-check enabled state every time the clipboard changes
+    QApplication.clipboard().dataChanged.connect(_update_state)
+    # Set initial state
+    _update_state()
+
+    return btn
+
+
 def _section_label(text: str) -> QLabel:
     """Return a small green uppercase section label, matching EAC's style."""
     label = QLabel(text.upper())
@@ -186,10 +243,14 @@ class AddMagnetDialog(QDialog):
 
         layout.addWidget(_section_label("Magnet Link"))
 
+        input_row = QHBoxLayout()
+        input_row.setSpacing(6)
         self._input = QLineEdit()
         self._input.setPlaceholderText("magnet:?xt=urn:btih:...")
         self._input.setMinimumHeight(30)
-        layout.addWidget(self._input)
+        input_row.addWidget(self._input)
+        input_row.addWidget(_make_paste_btn(self._input))
+        layout.addLayout(input_row)
 
         layout.addWidget(_muted_label(
             "Paste a full magnet link. TorBox will queue it and begin caching."
@@ -252,10 +313,14 @@ class AddLinkDialog(QDialog):
 
         layout.addWidget(_section_label("Hoster URL"))
 
+        input_row = QHBoxLayout()
+        input_row.setSpacing(6)
         self._input = QLineEdit()
         self._input.setPlaceholderText("https://1fichier.com/?abc123  or  https://mega.nz/...")
         self._input.setMinimumHeight(30)
-        layout.addWidget(self._input)
+        input_row.addWidget(self._input)
+        input_row.addWidget(_make_paste_btn(self._input))
+        layout.addLayout(input_row)
 
         layout.addWidget(_muted_label(
             "Paste a link from any supported hoster (1Fichier, Mega, Pixeldrain, etc.). "

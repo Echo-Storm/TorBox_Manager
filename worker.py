@@ -5,10 +5,12 @@
 # calls. All results are communicated back to the main thread exclusively
 # via Qt signals — the same safe pattern used in EAC.
 #
-# Two workers:
+# Four workers:
 #
 #   PollWorker      — fetches all three TorBox queues, emits unified list
 #   DownloadWorker  — requests a download link then streams the file to disk
+#   AddWorker       — submits a single add operation (magnet/torrent/link/nzb)
+#   DeleteWorker    — deletes a single item from the TorBox queue
 #
 # Threading model:
 #   - A QTimer in ui.py fires every poll_interval seconds and submits a
@@ -17,6 +19,8 @@
 #   - A DownloadWorker is submitted once per file when the user clicks
 #     Download (or Download All). One worker per file — they run in parallel
 #     up to QThreadPool's default thread limit.
+#   - AddWorker and DeleteWorker are one-shot: submitted on button click,
+#     emit finished/error, done. Keeps the main thread free during API calls.
 #
 # Assumption about TorBox API field names (verify against live responses):
 #   id, name, size, progress (0–100 int), download_state, magnet,
@@ -71,6 +75,27 @@ class DownloadSignals(QObject):
     status   = pyqtSignal(str)
 
 
+class AddSignals(QObject):
+    """Signals emitted by AddWorker."""
+
+    # Emitted on success or failure — carries (success: bool, detail: str)
+    finished = pyqtSignal(bool, str)
+
+    # Log-ready status string
+    status   = pyqtSignal(str)
+
+
+class DeleteSignals(QObject):
+    """Signals emitted by DeleteWorker."""
+
+    # Emitted on success or failure — carries (success: bool, detail: str, row_key: str)
+    # row_key is passed through so the UI slot knows which row to remove.
+    finished = pyqtSignal(bool, str, str)
+
+    # Log-ready status string
+    status   = pyqtSignal(str)
+
+
 # ---------------------------------------------------------------------------
 # PollWorker
 # ---------------------------------------------------------------------------
@@ -106,6 +131,80 @@ class PollWorker(QRunnable):
             self.signals.finished.emit(items)
         else:
             self.signals.error.emit(result["detail"])
+
+
+# ---------------------------------------------------------------------------
+# AddWorker
+# ---------------------------------------------------------------------------
+
+class AddWorker(QRunnable):
+    """
+    Submits a single add operation to TorBox on a background thread.
+
+    This keeps the main thread free during the API call — without this,
+    a slow connection could freeze the UI for up to 20 seconds (the request
+    timeout).
+
+    add_fn: a callable that takes no arguments and returns an api result dict.
+            Construct it as a lambda in the caller:
+                lambda: api.add_magnet(api_key, link)
+            This keeps AddWorker generic — it doesn't need to know which
+            endpoint or arguments are involved.
+
+    item_type: human-readable label for log messages ("magnet", "torrent", etc.)
+    """
+
+    def __init__(self, add_fn, item_type: str):
+        super().__init__()
+        self._add_fn    = add_fn
+        self._item_type = item_type
+        self.signals    = AddSignals()
+
+    def run(self):
+        self.signals.status.emit(f"Adding {self._item_type}...")
+        result = self._add_fn()
+        self.signals.finished.emit(result["success"], result["detail"])
+
+
+# ---------------------------------------------------------------------------
+# DeleteWorker
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# DeleteWorker
+# ---------------------------------------------------------------------------
+
+class DeleteWorkerSignals(QObject):
+    """Signals emitted by DeleteWorker."""
+    # (success, detail, row_key)
+    finished = pyqtSignal(bool, str, str)
+    status   = pyqtSignal(str)
+
+
+class DeleteWorker(QRunnable):
+    """
+    Deletes a single item from the TorBox queue on a background thread.
+
+    Same rationale as AddWorker — delete API calls can block the main thread
+    for several seconds on a slow connection.
+
+    delete_fn: callable → api result dict, constructed as a lambda in the caller.
+    row_key:   the item's row key, passed through to the finished signal so
+               the UI slot knows which row to remove.
+    item_name: human-readable name for log messages.
+    """
+
+    def __init__(self, delete_fn, row_key: str, item_name: str):
+        super().__init__()
+        self._delete_fn  = delete_fn
+        self._row_key    = row_key
+        self._item_name  = item_name
+        self.signals     = DeleteWorkerSignals()
+
+    def run(self):
+        self.signals.status.emit(f"Deleting: {self._item_name}...")
+        result = self._delete_fn()
+        self.signals.finished.emit(result["success"], result["detail"], self._row_key)
 
 
 # ---------------------------------------------------------------------------
@@ -219,8 +318,8 @@ class DownloadWorker(QRunnable):
 
         Torrents and magnets share the same endpoint. We use files[0].id
         as the file_id for the common case of a single-file torrent.
-        Multi-file torrents: we still use files[0] for v0.1; a file picker
-        dialog can be added later.
+        Multi-file torrents: we still use files[0] for now; a file picker
+        dialog is planned for a future version.
         """
         if source_type in ("torrent", "magnet"):
             files  = self.item.get("files", [])
@@ -327,7 +426,7 @@ class DownloadWorker(QRunnable):
                 filename = unquote(match.group(1))
             else:
                 # Fall back to plain filename="..."
-                match = re.search(r'filename=["\']?([^"\';\r\n]+)["\']?', content_disposition)
+                match = re.search(r'filename=["\'"]?([^"\';\\r\\n]+)["\'"]?', content_disposition)
                 if match:
                     filename = match.group(1).strip()
 

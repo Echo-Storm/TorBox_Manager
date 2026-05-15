@@ -29,7 +29,7 @@ import webbrowser
 from datetime import datetime
 
 from PyQt6.QtCore    import Qt, QThreadPool, QTimer
-from PyQt6.QtGui     import QFont, QAction
+from PyQt6.QtGui     import QAction, QBrush, QColor, QFont
 from PyQt6.QtWidgets import (
     QApplication,
     QFileDialog,
@@ -41,7 +41,6 @@ from PyQt6.QtWidgets import (
     QScrollArea,
     QSizePolicy,
     QSplitter,
-    QStatusBar,
     QSystemTrayIcon,
     QTableWidget,
     QTableWidgetItem,
@@ -105,7 +104,7 @@ from constants import (
     TYPE_ICONS,
 )
 from dialogs  import AboutDialog, AddLinkDialog, AddMagnetDialog, SettingsDialog
-from worker   import DownloadWorker, PollWorker
+from worker   import AddWorker, DeleteWorker, DownloadWorker, PollWorker
 
 
 # ---------------------------------------------------------------------------
@@ -129,7 +128,7 @@ MAIN_STYLE = f"""
         height: 2px;
     }}
     QTableWidget {{
-        background-color: {COLOR_BG};
+        background-color: {COLOR_PANEL};
         color: {COLOR_TEXT};
         gridline-color: {COLOR_BORDER};
         border: none;
@@ -202,12 +201,6 @@ MAIN_STYLE = f"""
         );
         border-radius: 4px;
         margin: 1px;
-    }}
-    QStatusBar {{
-        background-color: {COLOR_PANEL};
-        color: {COLOR_TEXT_MUTED};
-        border-top: 1px solid {COLOR_BORDER_BRIGHT};
-        font-size: 8pt;
     }}
     QScrollBar:vertical {{
         background-color: {COLOR_BG};
@@ -304,6 +297,33 @@ def _fmt_size(size_bytes) -> str:
     if b < 1024 ** 3:
         return f"{b / 1024 ** 2:.1f} MB"
     return f"{b / 1024 ** 3:.2f} GB"
+
+
+def _parse_progress(item: dict) -> int:
+    """
+    Normalize TorBox progress to an integer 0–100.
+
+    TorBox may return progress as an integer 0–100 or a float 0.0–1.0
+    depending on item type and state. Values strictly between 0 and 1
+    are treated as fractions and multiplied by 100. This handles both
+    formats without requiring a live API check.
+
+    Examples:
+        0      → 0      (not started)
+        1      → 1      (1% as integer)
+        0.01   → 1      (1% as float fraction)
+        0.5    → 50     (50% as float fraction)
+        50     → 50     (50% as integer)
+        100    → 100    (complete)
+    """
+    raw = item.get("progress", 0)
+    try:
+        p = float(raw)
+        if 0 < p < 1:       # float fraction — multiply up
+            p = p * 100
+        return max(0, min(100, int(round(p))))
+    except (TypeError, ValueError):
+        return 0
 
 
 def _torbox_state_to_status(item: dict) -> str:
@@ -435,6 +455,8 @@ class MainWindow(QMainWindow):
         # Keys deleted by the user — suppressed for 2 poll cycles so they
         # don't reappear before TorBox finishes processing the delete.
         self._deleted_keys: set[str] = set()
+        # All log lines stored as (level, formatted_string) for filter re-render
+        self._log_lines: list[tuple[str, str]] = []
 
         self._build_ui()
         self._build_tray()
@@ -453,6 +475,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(f"{APP_NAME} {APP_SUBTITLE}  •  v{APP_VERSION}")
         self.setMinimumSize(1000, 600)
         self.resize(1200, 700)
+        self.setWindowState(Qt.WindowState.WindowMaximized)
         self.setStyleSheet(MAIN_STYLE)
 
         central = QWidget()
@@ -461,31 +484,44 @@ class MainWindow(QMainWindow):
         root_layout.setSpacing(0)
         root_layout.setContentsMargins(0, 0, 0, 0)
 
-        # Header bar
+        # Header bar — full width, no inset
         root_layout.addWidget(self._build_header())
 
-        # Body: left panel + right content side by side
-        # Wrap body in a container with left/right margins so content sits
-        # inset from the header edges — header overhangs, body feels contained
-        body_container = QWidget()
-        body_container.setStyleSheet("background-color: transparent;")
-        body_outer = QHBoxLayout(body_container)
-        body_outer.setContentsMargins(0, 0, 8, 0)
-        body_outer.setSpacing(0)
+        # Body: left panel + right frame side by side.
+        # right_frame wraps the queue/log splitter AND the status bar widget
+        # together so a single border-right runs the full height of the window.
+        # The 12px right margin on body_container gives the border breathing room
+        # against the window edge — mirroring the visual weight of the left panel.
+        right_frame = QWidget()
+        right_frame.setStyleSheet(f"""
+            QWidget#right_frame {{
+                border-right: 2px solid {COLOR_BORDER_BRIGHT};
+                background-color: transparent;
+            }}
+        """)
+        right_frame.setObjectName("right_frame")
+        right_frame_layout = QVBoxLayout(right_frame)
+        right_frame_layout.setContentsMargins(0, 0, 0, 0)
+        right_frame_layout.setSpacing(0)
+        right_frame_layout.addWidget(self._build_right_panel(), stretch=1)
+        right_frame_layout.addWidget(self._build_status_bar())
 
         body_splitter = QSplitter(Qt.Orientation.Horizontal)
         body_splitter.setHandleWidth(2)
         body_splitter.addWidget(self._build_left_panel())
-        body_splitter.addWidget(self._build_right_panel())
+        body_splitter.addWidget(right_frame)
         body_splitter.setSizes([220, 980])
         body_splitter.setStretchFactor(0, 0)
         body_splitter.setStretchFactor(1, 1)
 
+        body_container = QWidget()
+        body_container.setStyleSheet(f"background: {COLOR_PANEL};")
+        body_outer = QHBoxLayout(body_container)
+        body_outer.setContentsMargins(0, 0, 12, 0)
+        body_outer.setSpacing(0)
         body_outer.addWidget(body_splitter)
-        root_layout.addWidget(body_container, stretch=1)
 
-        # Status bar
-        self._build_status_bar()
+        root_layout.addWidget(body_container, stretch=1)
 
     def _build_header(self) -> QWidget:
         """
@@ -696,25 +732,16 @@ class MainWindow(QMainWindow):
     def _build_right_panel(self) -> QWidget:
         """Right side: queue table (top) + log strip (bottom)."""
         right = QWidget()
-        right.setStyleSheet(f"border-right: 1px solid {COLOR_BORDER_BRIGHT};")
+        right.setStyleSheet("background-color: transparent;")
         layout = QVBoxLayout(right)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        splitter = QSplitter(Qt.Orientation.Vertical)
-        splitter.setHandleWidth(3)
+        layout.addWidget(self._build_queue_table(), stretch=1)
 
-        # Queue table
-        splitter.addWidget(self._build_queue_table())
-
-        # Log strip
-        splitter.addWidget(self._build_log_strip())
-
-        splitter.setSizes([480, 140])
-        splitter.setStretchFactor(0, 1)
-        splitter.setStretchFactor(1, 0)
-
-        layout.addWidget(splitter)
+        log_strip = self._build_log_strip()
+        log_strip.setFixedHeight(140)
+        layout.addWidget(log_strip)
         return right
 
     def _build_queue_table(self) -> QWidget:
@@ -758,7 +785,7 @@ class MainWindow(QMainWindow):
         self._table.setColumnWidth(COL_ADDED,    110)
         self._table.setColumnWidth(COL_PROGRESS, 160)
         self._table.setColumnWidth(COL_DOWNLOAD, 90)
-        self._table.setColumnWidth(COL_DELETE,   50)
+        self._table.setColumnWidth(COL_DELETE,   62)
 
         self._table.verticalHeader().setDefaultSectionSize(36)
 
@@ -845,79 +872,134 @@ class MainWindow(QMainWindow):
     def _build_log_strip(self) -> QWidget:
         """Monospace timestamped log at the bottom of the right panel."""
         container = QWidget()
-        container.setStyleSheet(f"background-color: {COLOR_PANEL};")
+        container.setObjectName("log_container")
+        container.setStyleSheet(f"""
+            QWidget#log_container {{
+                background-color: {COLOR_PANEL};
+                border-right: 2px solid {COLOR_BORDER_BRIGHT};
+            }}
+        """)
         layout = QVBoxLayout(container)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        # Log header — matches column header style for consistency
-        header = QLabel("   LOG")
-        header.setFixedHeight(26)
-        header.setStyleSheet(f"""
-            background-color: {COLOR_PANEL};
+        # Log header — same visual weight as the queue table column header bar
+        header_row = QWidget()
+        header_row.setObjectName("log_header_row")
+        header_row.setFixedHeight(26)
+        header_row.setStyleSheet(f"""
+            QWidget#log_header_row {{
+                background-color: {COLOR_PANEL};
+                border-top: 1px solid {COLOR_BORDER_BRIGHT};
+                border-bottom: 1px solid {COLOR_BORDER_BRIGHT};
+            }}
+        """)
+        header_layout = QHBoxLayout(header_row)
+        header_layout.setContentsMargins(8, 0, 8, 0)
+        header_layout.setSpacing(0)
+
+        header_label = QLabel("LOG")
+        header_label.setStyleSheet(f"""
             color: {COLOR_ACCENT};
             font-size: 8pt;
             font-weight: bold;
             letter-spacing: 3px;
-            border-top: 1px solid {COLOR_BORDER_BRIGHT};
-            border-bottom: 1px solid {COLOR_BORDER_BRIGHT};
-            padding-top: 1px;
+            background: transparent;
+            border: none;
         """)
-        layout.addWidget(header)
+        header_layout.addWidget(header_label)
+        header_layout.addStretch()
+
+        # "errors only" filter toggle — small, right-aligned, visually quiet
+        self._log_filter_btn = QPushButton("errors only")
+        self._log_filter_btn.setCheckable(True)
+        self._log_filter_btn.setChecked(False)
+        self._log_filter_btn.setFixedHeight(16)
+        self._log_filter_btn.setFixedWidth(68)
+        self._log_filter_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: transparent;
+                color: {COLOR_TEXT_MUTED};
+                border: 1px solid {COLOR_BORDER};
+                border-radius: 2px;
+                font-size: 7pt;
+                letter-spacing: 0.5px;
+                padding: 0 4px;
+            }}
+            QPushButton:hover {{
+                border-color: {COLOR_BORDER_BRIGHT};
+                color: {COLOR_TEXT};
+            }}
+            QPushButton:checked {{
+                color: {COLOR_ACCENT};
+                border: 1px solid {COLOR_ACCENT_DIM};
+            }}
+        """)
+        self._log_filter_btn.toggled.connect(self._on_log_filter_toggled)
+        header_layout.addWidget(self._log_filter_btn)
+
+        layout.addWidget(header_row)
 
         self._log_view = QTextEdit()
         self._log_view.setReadOnly(True)
         self._log_view.setFont(QFont(FONT_LOG_FAMILY, FONT_LOG_SIZE))
         self._log_view.setStyleSheet(
-            f"background-color: {COLOR_BG}; color: #888888; "
-            f"border: none;"
+            f"background-color: {COLOR_BG}; color: #888888; border: none;"
         )
         self._log_view.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         layout.addWidget(self._log_view)
 
         return container
 
-    def _build_status_bar(self):
-        """Pro status bar — status indicator left, Download All accent button, donate right."""
-        bar = QStatusBar()
-        bar.setSizeGripEnabled(False)
+    def _on_log_filter_toggled(self, checked: bool):
+        """Re-render the log view showing all lines or errors/warnings only."""
+        self._log_view.clear()
+        for level, line in self._log_lines:
+            if checked and level not in ("WARN", "ERROR"):
+                continue
+            self._log_view.append(line)
+        sb = self._log_view.verticalScrollBar()
+        sb.setValue(sb.maximum())
+
+    def _build_status_bar(self) -> QWidget:
+        """Status bar as a plain QWidget — returned and added to right_frame layout.
+
+        Using a plain widget instead of QMainWindow.setStatusBar() means the
+        right_frame container's border-right runs through it uninterrupted,
+        giving a single continuous vertical line from header to window bottom.
+        """
+        bar = QWidget()
         bar.setFixedHeight(32)
         bar.setStyleSheet(f"""
-            QStatusBar {{
+            QWidget {{
                 background-color: {COLOR_PANEL};
                 border-top: 1px solid {COLOR_BORDER_BRIGHT};
-                padding: 0;
-            }}
-            QStatusBar::item {{
-                border: none;
             }}
         """)
-        self.setStatusBar(bar)
 
-        # Status dot + text
-        status_widget = QWidget()
-        status_widget.setStyleSheet("background: transparent;")
-        status_layout = QHBoxLayout(status_widget)
-        status_layout.setContentsMargins(4, 0, 0, 0)
-        status_layout.setSpacing(6)
+        bar_layout = QHBoxLayout(bar)
+        bar_layout.setContentsMargins(8, 0, 8, 0)
+        bar_layout.setSpacing(0)
 
+        # Status dot
         self._status_dot = QLabel("●")
         self._status_dot.setStyleSheet(
-            f"color: {COLOR_ACCENT}; font-size: 8pt; background: transparent;"
+            f"color: {COLOR_ACCENT}; font-size: 8pt; background: transparent; border: none;"
         )
-        status_layout.addWidget(self._status_dot)
+        bar_layout.addWidget(self._status_dot)
 
+        # Status text — stretches to fill
         self._status_label = QLabel("Ready")
         self._status_label.setStyleSheet(
-            f"color: {COLOR_TEXT_MUTED}; font-size: 8pt; background: transparent;"
+            f"color: {COLOR_TEXT_MUTED}; font-size: 8pt; background: transparent; "
+            f"border: none; padding-left: 6px;"
         )
-        status_layout.addWidget(self._status_label)
-        bar.addWidget(status_widget, stretch=1)
+        bar_layout.addWidget(self._status_label, stretch=1)
 
-        # Download All — outline only, fills on hover, matches row buttons
+        # Download All — outline at rest, fills green on hover
         dl_all_btn = QPushButton("⬇  Download All")
-        dl_all_btn.setFixedHeight(24)
-        dl_all_btn.setFixedWidth(130)
+        dl_all_btn.setFixedHeight(22)
+        dl_all_btn.setFixedWidth(118)
         dl_all_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: transparent;
@@ -925,12 +1007,12 @@ class MainWindow(QMainWindow):
                 border: 1px solid {COLOR_BORDER};
                 border-radius: 3px;
                 font-size: 8pt;
-                padding: 0 10px;
+                padding: 0 8px;
             }}
             QPushButton:hover {{
                 background-color: {COLOR_ACCENT};
                 color: #000000;
-                border: 1px solid {COLOR_ACCENT};
+                border-color: {COLOR_ACCENT};
             }}
             QPushButton:pressed {{
                 background-color: {COLOR_ACCENT};
@@ -938,19 +1020,21 @@ class MainWindow(QMainWindow):
             }}
         """)
         dl_all_btn.clicked.connect(self._on_download_all)
-        bar.addPermanentWidget(dl_all_btn)
+        bar_layout.addWidget(dl_all_btn)
 
-        # Divider
-        divider = QLabel(" | ")
-        divider.setStyleSheet(
-            f"color: {COLOR_BORDER_BRIGHT}; background: transparent; font-size: 9pt; padding: 0 2px;"
-        )
-        bar.addPermanentWidget(divider)
+        # 1px divider with breathing room either side
+        bar_layout.addSpacing(8)
+        sep = QWidget()
+        sep.setFixedWidth(1)
+        sep.setFixedHeight(16)
+        sep.setStyleSheet(f"background-color: {COLOR_BORDER_BRIGHT}; border: none;")
+        bar_layout.addWidget(sep)
+        bar_layout.addSpacing(8)
 
-        # Ko-fi link
+        # Ko-fi donate link
         kofi_btn = QPushButton("♥  donate")
-        kofi_btn.setFixedHeight(24)
-        kofi_btn.setFixedWidth(70)
+        kofi_btn.setFixedHeight(22)
+        kofi_btn.setFixedWidth(66)
         kofi_btn.setStyleSheet(f"""
             QPushButton {{
                 color: {COLOR_ACCENT_DIM};
@@ -965,13 +1049,9 @@ class MainWindow(QMainWindow):
         """)
         kofi_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         kofi_btn.clicked.connect(lambda: webbrowser.open(KOFI_URL))
-        bar.addPermanentWidget(kofi_btn)
+        bar_layout.addWidget(kofi_btn)
 
-        # Right spacer — aligns permanent widgets with content right edge
-        right_pad = QLabel("")
-        right_pad.setFixedWidth(8)
-        right_pad.setStyleSheet("background: transparent;")
-        bar.addPermanentWidget(right_pad)
+        return bar
 
     def _build_tray(self):
         """System tray icon with Open / About / Restart / Quit menu."""
@@ -1047,11 +1127,10 @@ class MainWindow(QMainWindow):
     def _on_add_magnet(self):
         dlg = AddMagnetDialog(self)
         if dlg.exec():
-            link = dlg.magnet_link()
+            link    = dlg.magnet_link()
+            api_key = self.config.get("api_key", "")
             self._log(f"Adding magnet: {link[:60]}{'...' if len(link) > 60 else ''}")
-            self._set_status("Adding magnet...")
-            result = api.add_magnet(self.config.get("api_key", ""), link)
-            self._handle_add_result(result, "magnet")
+            self._submit_add(lambda: api.add_magnet(api_key, link), "magnet")
 
     def _on_add_torrent(self):
         path, _ = QFileDialog.getOpenFileName(
@@ -1059,19 +1138,17 @@ class MainWindow(QMainWindow):
         )
         if not path:
             return
+        api_key = self.config.get("api_key", "")
         self._log(f"Adding torrent: {os.path.basename(path)}")
-        self._set_status("Adding torrent...")
-        result = api.add_torrent_file(self.config.get("api_key", ""), path)
-        self._handle_add_result(result, "torrent")
+        self._submit_add(lambda: api.add_torrent_file(api_key, path), "torrent")
 
     def _on_add_link(self):
         dlg = AddLinkDialog(self)
         if dlg.exec():
-            url = dlg.url()
+            url     = dlg.url()
+            api_key = self.config.get("api_key", "")
             self._log(f"Adding hoster link: {url[:60]}{'...' if len(url) > 60 else ''}")
-            self._set_status("Adding hoster link...")
-            result = api.add_hoster_link(self.config.get("api_key", ""), url)
-            self._handle_add_result(result, "hoster link")
+            self._submit_add(lambda: api.add_hoster_link(api_key, url), "hoster link")
 
     def _on_add_nzb(self):
         path, _ = QFileDialog.getOpenFileName(
@@ -1079,21 +1156,30 @@ class MainWindow(QMainWindow):
         )
         if not path:
             return
+        api_key = self.config.get("api_key", "")
         self._log(f"Adding NZB: {os.path.basename(path)}")
-        self._set_status("Adding NZB...")
-        result = api.add_nzb_file(self.config.get("api_key", ""), path)
-        self._handle_add_result(result, "NZB")
+        self._submit_add(lambda: api.add_nzb_file(api_key, path), "NZB")
 
-    def _handle_add_result(self, result: dict, item_type: str):
-        """Log the result of an add operation and trigger a refresh."""
-        if result["success"]:
-            self._log(f"{item_type.capitalize()} added successfully: {result['detail']}")
+    def _submit_add(self, add_fn, item_type: str):
+        """Dispatch an AddWorker to the thread pool for a single add operation."""
+        self._set_status(f"Adding {item_type}...")
+        worker = AddWorker(add_fn, item_type)
+        worker.signals.finished.connect(
+            lambda ok, detail, t=item_type: self._on_add_finished(ok, detail, t)
+        )
+        worker.signals.status.connect(self._set_status)
+        self._pool.start(worker)
+
+    def _on_add_finished(self, success: bool, detail: str, item_type: str):
+        """Slot — called on main thread when AddWorker completes."""
+        if success:
+            self._log(f"{item_type.capitalize()} added successfully: {detail}")
             self._set_status(f"{item_type.capitalize()} added — refreshing queue...")
             QTimer.singleShot(4000, self._submit_poll)
             QTimer.singleShot(10000, self._submit_poll)  # second check in case TorBox is slow
         else:
-            self._log(f"Failed to add {item_type}: {result['detail']}", "ERROR")
-            self._set_status(f"Error: {result['detail']}")
+            self._log(f"Failed to add {item_type}: {detail}", "ERROR")
+            self._set_status(f"Error: {detail}")
 
     # -----------------------------------------------------------------------
     # Queue control slots
@@ -1171,9 +1257,17 @@ class MainWindow(QMainWindow):
 
     def _on_poll_finished(self, items: list):
         """Slot — runs on main thread — update the queue table from fresh data."""
-        self._log(f"[DEBUG] Poll returned {len(items)} item(s): {[_row_key(i) for i in items]}")
         self._update_queue_table(items)
-        self._set_status(f"Ready — {len(items)} item(s) in queue")
+        # Build a breakdown: total + counts by internal status
+        ready      = sum(1 for i in items if _torbox_state_to_status(i) == STATUS_READY)
+        dling      = sum(1 for i in items if _torbox_state_to_status(i) == STATUS_DOWNLOADING)
+        total      = len(items)
+        parts = [f"{total} item{'s' if total != 1 else ''}"]
+        if ready:
+            parts.append(f"{ready} ready")
+        if dling:
+            parts.append(f"{dling} downloading")
+        self._set_status("  ·  ".join(parts))
 
     def _on_poll_error(self, msg: str):
         self._log(f"Poll error: {msg}", "ERROR")
@@ -1211,7 +1305,6 @@ class MainWindow(QMainWindow):
 
         # Clear the deleted-keys suppression set after each poll cycle.
         # By the next poll TorBox will have finished processing the deletes.
-        self._log(f"[DEBUG] Table now has {self._table.rowCount()} row(s), index keys: {list(self._row_index.keys())}")
         self._deleted_keys.clear()
 
     def _add_queue_row(self, key: str, item: dict):
@@ -1234,7 +1327,7 @@ class MainWindow(QMainWindow):
         # Size
         size_cell = QTableWidgetItem(_fmt_size(item.get("size", 0)))
         size_cell.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-        size_cell.setForeground(__import__('PyQt6.QtGui', fromlist=['QColor']).QColor(COLOR_TEXT_MUTED))
+        size_cell.setForeground(QColor(COLOR_TEXT_MUTED))
         self._table.setItem(row, COL_SIZE, size_cell)
 
         # Status — compound display text with color coding
@@ -1248,7 +1341,7 @@ class MainWindow(QMainWindow):
         # Progress bar
         pbar = QProgressBar()
         pbar.setRange(0, 100)
-        pbar.setValue(int(item.get("progress", 0)))
+        pbar.setValue(_parse_progress(item))
         pbar.setTextVisible(True)
         self._style_progress_bar(pbar, status)
         self._table.setCellWidget(row, COL_PROGRESS, pbar)
@@ -1280,12 +1373,40 @@ class MainWindow(QMainWindow):
         dl_btn.clicked.connect(lambda checked, k=key: self._on_download_clicked(k))
         self._table.setCellWidget(row, COL_DOWNLOAD, dl_btn)
 
-        # Delete button
+        # Delete button — wrapped in a container with right padding so it
+        # doesn't press against the border. The container is transparent so
+        # the table's alternating row color shows through uninterrupted.
         del_btn = QPushButton("✕")
-        del_btn.setFixedHeight(28)
+        del_btn.setFixedHeight(24)
+        del_btn.setFixedWidth(28)
         del_btn.setToolTip("Remove from TorBox queue")
+        del_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: transparent;
+                color: {COLOR_TEXT_MUTED};
+                border: 1px solid {COLOR_BORDER};
+                border-radius: 3px;
+                font-size: 9pt;
+            }}
+            QPushButton:hover {{
+                background-color: #3d1a1a;
+                color: #e05050;
+                border-color: #8b3030;
+            }}
+            QPushButton:pressed {{
+                background-color: #8b3030;
+                color: #ffffff;
+            }}
+        """)
         del_btn.clicked.connect(lambda checked, k=key: self._on_delete_clicked(k))
-        self._table.setCellWidget(row, COL_DELETE, del_btn)
+
+        del_container = QWidget()
+        del_container.setStyleSheet("background: transparent;")
+        del_layout = QHBoxLayout(del_container)
+        del_layout.setContentsMargins(4, 0, 10, 0)
+        del_layout.setSpacing(0)
+        del_layout.addWidget(del_btn)
+        self._table.setCellWidget(row, COL_DELETE, del_container)
 
         # Optional columns
         self._set_optional_cells(row, item)
@@ -1314,7 +1435,7 @@ class MainWindow(QMainWindow):
         if key not in self._downloading:
             pbar = self._table.cellWidget(row, COL_PROGRESS)
             if isinstance(pbar, QProgressBar):
-                pbar.setValue(int(item.get("progress", 0)))
+                pbar.setValue(_parse_progress(item))
                 self._style_progress_bar(pbar, status)
 
         # Enable/disable download button
@@ -1330,7 +1451,7 @@ class MainWindow(QMainWindow):
         def _cell(text: str) -> QTableWidgetItem:
             c = QTableWidgetItem(str(text))
             c.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-            c.setForeground(__import__('PyQt6.QtGui', fromlist=['QColor']).QColor(COLOR_TEXT_MUTED))
+            c.setForeground(QColor(COLOR_TEXT_MUTED))
             return c
 
         seeds = item.get("seeds", 0) or 0
@@ -1360,7 +1481,6 @@ class MainWindow(QMainWindow):
     @staticmethod
     def _apply_status_color(cell, status: str):
         """Apply foreground color only to a status cell — no background tint."""
-        from PyQt6.QtGui import QColor, QBrush
         colors = STATUS_COLORS.get(status, (None, None))
         _, fg = colors   # background intentionally ignored — too busy
         if fg:
@@ -1380,14 +1500,18 @@ class MainWindow(QMainWindow):
                 "QProgressBar::chunk { background-color: #8b3030; }"
             )
         else:
-            pbar.setFormat("%p%")
             pbar.setStyleSheet(_PROGRESS_BAR_ACTIVE_STYLE)
             if status == STATUS_DOWNLOADING:
-                # Indeterminate if progress is 0 (TorBox hasn't reported yet)
-                if pbar.value() == 0:
+                val = pbar.value()
+                if val <= 0:
+                    # TorBox hasn't reported progress yet — pulse to show activity
                     pbar.setRange(0, 0)
+                    pbar.setFormat("")
                 else:
                     pbar.setRange(0, 100)
+                    pbar.setFormat(f"{val}%")
+            else:
+                pbar.setFormat("%p%")
 
     # -----------------------------------------------------------------------
     # Download
@@ -1554,7 +1678,7 @@ class MainWindow(QMainWindow):
         item_id     = item.get("id")
         api_key     = self.config.get("api_key", "")
 
-        # Confirm
+        # Confirm before doing anything — confirmation stays on main thread (correct)
         reply = QMessageBox.question(
             self,
             "Delete Item",
@@ -1564,21 +1688,39 @@ class MainWindow(QMainWindow):
         if reply != QMessageBox.StandardButton.Yes:
             return
 
+        # Build the delete callable based on type
         if source_type in ("torrent", "magnet"):
-            result = api.delete_torrent(api_key, item_id)
+            delete_fn = lambda: api.delete_torrent(api_key, item_id)
         elif source_type == "webdl":
-            result = api.delete_webdl(api_key, item_id)
+            delete_fn = lambda: api.delete_webdl(api_key, item_id)
         elif source_type == "usenet":
-            result = api.delete_usenet(api_key, item_id)
+            delete_fn = lambda: api.delete_usenet(api_key, item_id)
         else:
-            result = {"success": False, "detail": "Unknown type — removed from display only."}
-
-        if result["success"]:
-            self._log(f"Deleted from TorBox: {name}")
-            self._deleted_keys.add(key)
+            # Unknown type — just remove from display, nothing to call
+            self._log(f"Unknown type '{source_type}' — removed from display only.")
             self._remove_row(key)
+            return
+
+        # Remove the row immediately so the UI feels snappy.
+        # If the API call fails the row is gone but the item still exists on TorBox —
+        # the next poll will bring it back. This is the least-surprising behaviour.
+        self._deleted_keys.add(key)
+        self._remove_row(key)
+        self._log(f"Deleting from TorBox: {name}")
+
+        worker = DeleteWorker(delete_fn, key, name)
+        worker.signals.finished.connect(self._on_delete_finished)
+        worker.signals.status.connect(self._set_status)
+        self._pool.start(worker)
+
+    def _on_delete_finished(self, success: bool, detail: str, key: str):
+        """Slot — called on main thread when DeleteWorker completes."""
+        if success:
+            self._log(f"Deleted from TorBox: {detail}")
         else:
-            self._log(f"Delete failed for '{name}': {result['detail']}", "ERROR")
+            # The row is already gone from the display. Log the failure;
+            # the next poll will restore the item if TorBox didn't process it.
+            self._log(f"Delete API call failed: {detail} — item may reappear on next poll.", "WARN")
 
     # -----------------------------------------------------------------------
     # Log and status helpers
@@ -1587,10 +1729,14 @@ class MainWindow(QMainWindow):
     def _log(self, msg: str, level: str = "INFO"):
         ts   = datetime.now().strftime("%H:%M:%S")
         line = f"{ts} [{level}] {msg}"
-        self._log_view.append(line)
-        # Auto-scroll to the bottom
-        sb = self._log_view.verticalScrollBar()
-        sb.setValue(sb.maximum())
+        # Store every line so the filter toggle can re-render without data loss
+        self._log_lines.append((level, line))
+        # Only append to the visible view if the filter allows this level
+        filter_active = getattr(self, "_log_filter_btn", None) and self._log_filter_btn.isChecked()
+        if not filter_active or level in ("WARN", "ERROR"):
+            self._log_view.append(line)
+            sb = self._log_view.verticalScrollBar()
+            sb.setValue(sb.maximum())
 
     def _set_status(self, msg: str):
         self._status_label.setText(msg)

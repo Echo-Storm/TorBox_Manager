@@ -38,7 +38,7 @@ def _setup_logging() -> logging.Logger:
 
     # File handler — always on
     try:
-        fh = logging.FileHandler(log_path, encoding="utf-8")
+        fh = logging.FileHandler(log_path, mode='w', encoding="utf-8")
         fh.setLevel(logging.DEBUG)
         fh.setFormatter(fmt)
         logger.addHandler(fh)

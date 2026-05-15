@@ -7,18 +7,16 @@ Manages torrents, magnet links, hoster URLs, and NZBs from a single unified queu
 
 ---
 
-## Screenshot
-
-*(coming soon — v0.1 first build)*
-
----
-
 ## Features
 
 - **Four add types** — Magnet link, Torrent file, Hoster URL, NZB file
+- **Clipboard paste buttons** — one-click paste in the Magnet and Hoster Link dialogs
 - **Unified queue table** — all active TorBox items in one view regardless of type
+- **Optional columns** — Seeds, Peers, Ratio, ETA, Added; right-click the column header to show/hide
 - **In-app download** — files stream directly to your chosen folder with a live progress bar
 - **Auto-polling** — queue refreshes on a configurable interval (default 30 seconds)
+- **Non-blocking UI** — add and delete operations run on background threads; the UI never freezes
+- **Log strip** — timestamped event log with an "errors only" filter toggle
 - **System tray** — minimizes to tray on close; Open / About / Restart / Quit menu
 - **EchoStorm dark theme** — matches Echo Audio Converter's visual identity
 - **Self-contained** — single folder, isolated venv, no installer, no registry
@@ -49,30 +47,31 @@ All future launches are instant: just double-click `launch.bat` (or pin it to yo
 
 ## Notes
 
-- **Queue population** — items appear one at a time as TorBox registers each add. This is normal. Adding a batch of torrents takes a few seconds per item to appear.
-- **"Found Cached Torrent"** — if TorBox already has a torrent cached, it reuses it. Your item will appear as Ready almost immediately.
-- **Download errors** — if a specific torrent shows "error processing your request" on every attempt, it may be a bad cache entry on TorBox's side. Delete it and try re-adding, or report it to TorBox support.
-- **Debug logging** — the log strip shows `[DEBUG]` lines during polling. This is intentional during v0.1 development and will be cleaned up for v1.0.
+- **Queue population** — items appear as TorBox registers each add. Adding a batch may take a few seconds per item.
+- **"Found Cached Torrent"** — if TorBox already has a torrent cached it reuses it; your item will appear as Ready almost immediately.
+- **Download errors** — if a torrent shows "error processing your request" on every attempt it may be a bad cache entry on TorBox's side. Delete it, re-add it, or contact TorBox support.
+- **Log file** — `TorBox_Manager_Log.txt` is overwritten on each launch. It contains the current session only. For persistent history, copy it before restarting.
+- **Multi-file torrents** — currently downloads the first file in a torrent's file list. A file picker dialog is planned for a future version.
 
 ---
 
 ## File Structure
 
 ```
-torbox_manager/
-├── main.py              Entry point — logging, QApplication, MainWindow
-├── ui.py                MainWindow — left panel, queue table, log strip, status bar
-├── dialogs.py           Add Magnet, Add Link, Settings, About dialogs
-├── api.py               All TorBox API calls — no Qt, no threads
-├── worker.py            PollWorker (queue refresh) + DownloadWorker (file fetch)
-├── config.py            JSON config load/save
-├── constants.py         API URLs, theme colors, column indices, static values
+TorBox_Manager/
+├── main.py                  Entry point — logging, QApplication, MainWindow
+├── ui.py                    MainWindow — left panel, queue table, log strip, status bar
+├── dialogs.py               Add Magnet, Add Link, Settings, About dialogs
+├── api.py                   All TorBox API calls — no Qt, no threads
+├── worker.py                PollWorker, DownloadWorker, AddWorker, DeleteWorker
+├── config.py                JSON config load/save
+├── constants.py             API URLs, theme colors, column indices, static values
 ├── assets/
-│   └── tray_icon.png    32×32 tray icon (auto-generated placeholder if missing)
-├── requirements.txt     PyQt6, requests
-├── launch.bat           First-run venv setup + app launcher
-├── config.json          Created on first save — API key, download dir, poll interval
-└── TorBox_Manager_Log.txt  Created on first launch — all events and errors
+│   └── tray_icon.png        32×32 tray icon (auto-generated placeholder if missing)
+├── requirements.txt         PyQt6, requests
+├── launch.bat               First-run venv setup + app launcher
+├── config.json              Created on first save — API key, download dir, settings
+└── TorBox_Manager_Log.txt   Created on launch — current session events and errors
 ```
 
 ---
@@ -84,6 +83,7 @@ torbox_manager/
 | API Key | TorBox bearer token — required | *(empty)* |
 | Download Directory | Where completed files are saved | *(prompted on first download)* |
 | Poll Interval | How often to check TorBox for status updates | 30 seconds |
+| Minimize to Tray | Hide to tray on close instead of quitting | Enabled |
 
 Settings are stored in `config.json` alongside the script files. No registry, no AppData.
 
@@ -91,16 +91,20 @@ Settings are stored in `config.json` alongside the script files. No registry, no
 
 ## Roadmap
 
-### v0.1 (this build)
-- Four add types, unified queue, in-app download, system tray, EchoStorm theme
+### v0.1 ✓
+Four add types, unified queue, in-app download, system tray, EchoStorm theme.
 
-### v0.2 (planned)
-- Additional queue columns: Seeders, Peers, Ratio, Added time, ETA (all confirmed in API)
-- Right-click header to show/hide optional columns
-- Multi-file torrent support (file picker dialog before download)
-- Add operations moved off the main thread (prevents brief UI freeze on slow connections)
-- Auto-retry on transient download link errors
-- Settings dialog polish
+### v0.2 ✓
+Optional queue columns (Seeds, Peers, Ratio, ETA, Added), right-click column visibility,
+auto-retry on transient download link errors, minimize-to-tray setting.
+
+### v0.3 ✓
+Clipboard paste buttons, threaded add/delete, log filter, status bar breakdown,
+layout polish, log file overwrite on startup.
+
+### v0.4 (planned)
+- Multi-file torrent picker dialog
+- Pause polling when minimized with no active downloads
 
 ---
 

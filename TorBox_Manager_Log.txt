@@ -1,0 +1,517 @@
+2026-05-15 03:38:34 [INFO] Logging initialized: E:\TorBox_Manager\TorBox_Manager_Log.txt
+2026-05-15 03:38:34 [INFO] TorBox Manager EchoStorm Edition v0.3.0 starting
+2026-05-15 03:38:34 [INFO] Config loaded — api_key: set, download_dir: 'C:/Users/Echostorm/Downloads', poll_interval: 30s
+2026-05-15 03:38:35 [INFO] MainWindow shown — entering event loop
+2026-05-15 03:38:35 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:38:37 [DEBUG] https://api.torbox.app:443 "GET /v1/api/torrents/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:38:37 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:38:37 [DEBUG] https://api.torbox.app:443 "GET /v1/api/webdl/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:38:37 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:38:37 [DEBUG] https://api.torbox.app:443 "GET /v1/api/usenet/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:38:52 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:38:56 [DEBUG] https://api.torbox.app:443 "POST /v1/api/torrents/createtorrent HTTP/1.1" 200 None
+2026-05-15 03:39:00 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:39:00 [DEBUG] https://api.torbox.app:443 "GET /v1/api/torrents/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:39:00 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:39:01 [DEBUG] https://api.torbox.app:443 "GET /v1/api/webdl/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:39:01 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:39:01 [DEBUG] https://api.torbox.app:443 "GET /v1/api/usenet/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:39:05 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:39:06 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:39:09 [DEBUG] https://api.torbox.app:443 "GET /v1/api/torrents/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:39:09 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:39:09 [DEBUG] https://api.torbox.app:443 "GET /v1/api/webdl/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:39:09 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:39:09 [DEBUG] https://api.torbox.app:443 "GET /v1/api/usenet/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:39:10 [DEBUG] https://api.torbox.app:443 "GET /v1/api/torrents/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:39:10 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:39:11 [DEBUG] https://api.torbox.app:443 "GET /v1/api/webdl/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:39:11 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:39:11 [DEBUG] https://api.torbox.app:443 "GET /v1/api/usenet/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:39:35 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:39:35 [DEBUG] https://api.torbox.app:443 "GET /v1/api/torrents/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:39:35 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:39:36 [DEBUG] https://api.torbox.app:443 "GET /v1/api/webdl/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:39:36 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:39:36 [DEBUG] https://api.torbox.app:443 "GET /v1/api/usenet/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:40:05 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:40:10 [DEBUG] https://api.torbox.app:443 "GET /v1/api/torrents/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:40:10 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:40:11 [DEBUG] https://api.torbox.app:443 "GET /v1/api/webdl/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:40:11 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:40:11 [DEBUG] https://api.torbox.app:443 "GET /v1/api/usenet/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:40:35 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:40:35 [DEBUG] https://api.torbox.app:443 "GET /v1/api/torrents/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:40:35 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:40:36 [DEBUG] https://api.torbox.app:443 "GET /v1/api/webdl/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:40:36 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:40:37 [DEBUG] https://api.torbox.app:443 "GET /v1/api/usenet/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:41:05 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:41:05 [DEBUG] https://api.torbox.app:443 "GET /v1/api/torrents/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:41:05 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:41:07 [DEBUG] https://api.torbox.app:443 "GET /v1/api/webdl/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:41:07 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:41:07 [DEBUG] https://api.torbox.app:443 "GET /v1/api/usenet/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:41:16 [CRITICAL] Uncaught exception
+Traceback (most recent call last):
+  File "E:\TorBox_Manager\dialogs.py", line 191, in _update_state
+    btn.setEnabled(bool(QApplication.clipboard().text().strip()))
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: wrapped C/C++ object of type QPushButton has been deleted
+2026-05-15 03:41:35 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:41:35 [DEBUG] https://api.torbox.app:443 "GET /v1/api/torrents/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:41:35 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:41:36 [DEBUG] https://api.torbox.app:443 "GET /v1/api/webdl/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:41:36 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:41:37 [DEBUG] https://api.torbox.app:443 "GET /v1/api/usenet/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:42:05 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:42:07 [DEBUG] https://api.torbox.app:443 "GET /v1/api/torrents/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:42:07 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:42:07 [DEBUG] https://api.torbox.app:443 "GET /v1/api/webdl/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:42:07 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:42:08 [DEBUG] https://api.torbox.app:443 "GET /v1/api/usenet/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:42:35 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:42:35 [DEBUG] https://api.torbox.app:443 "GET /v1/api/torrents/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:42:35 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:42:36 [DEBUG] https://api.torbox.app:443 "GET /v1/api/webdl/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:42:36 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:42:37 [DEBUG] https://api.torbox.app:443 "GET /v1/api/usenet/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:42:38 [CRITICAL] Uncaught exception
+Traceback (most recent call last):
+  File "E:\TorBox_Manager\dialogs.py", line 191, in _update_state
+    btn.setEnabled(bool(QApplication.clipboard().text().strip()))
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: wrapped C/C++ object of type QPushButton has been deleted
+2026-05-15 03:42:46 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:42:49 [DEBUG] https://api.torbox.app:443 "POST /v1/api/torrents/createtorrent HTTP/1.1" 200 None
+2026-05-15 03:42:53 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:42:54 [DEBUG] https://api.torbox.app:443 "GET /v1/api/torrents/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:42:54 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:42:55 [DEBUG] https://api.torbox.app:443 "GET /v1/api/webdl/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:42:55 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:42:55 [DEBUG] https://api.torbox.app:443 "GET /v1/api/usenet/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:42:59 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:43:01 [DEBUG] https://api.torbox.app:443 "GET /v1/api/torrents/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:43:01 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:43:02 [DEBUG] https://api.torbox.app:443 "GET /v1/api/webdl/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:43:02 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:43:02 [DEBUG] https://api.torbox.app:443 "GET /v1/api/usenet/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:43:05 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:43:05 [DEBUG] https://api.torbox.app:443 "GET /v1/api/torrents/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:43:05 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:43:06 [DEBUG] https://api.torbox.app:443 "GET /v1/api/webdl/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:43:06 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:43:06 [DEBUG] https://api.torbox.app:443 "GET /v1/api/usenet/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:43:35 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:43:36 [DEBUG] https://api.torbox.app:443 "GET /v1/api/torrents/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:43:36 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:43:37 [DEBUG] https://api.torbox.app:443 "GET /v1/api/webdl/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:43:37 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:43:37 [DEBUG] https://api.torbox.app:443 "GET /v1/api/usenet/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:44:05 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:44:06 [CRITICAL] Uncaught exception
+Traceback (most recent call last):
+  File "E:\TorBox_Manager\dialogs.py", line 191, in _update_state
+    btn.setEnabled(bool(QApplication.clipboard().text().strip()))
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: wrapped C/C++ object of type QPushButton has been deleted
+2026-05-15 03:44:06 [CRITICAL] Uncaught exception
+Traceback (most recent call last):
+  File "E:\TorBox_Manager\dialogs.py", line 191, in _update_state
+    btn.setEnabled(bool(QApplication.clipboard().text().strip()))
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: wrapped C/C++ object of type QPushButton has been deleted
+2026-05-15 03:44:06 [CRITICAL] Uncaught exception
+Traceback (most recent call last):
+  File "E:\TorBox_Manager\dialogs.py", line 191, in _update_state
+    btn.setEnabled(bool(QApplication.clipboard().text().strip()))
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: wrapped C/C++ object of type QPushButton has been deleted
+2026-05-15 03:44:06 [CRITICAL] Uncaught exception
+Traceback (most recent call last):
+  File "E:\TorBox_Manager\dialogs.py", line 191, in _update_state
+    btn.setEnabled(bool(QApplication.clipboard().text().strip()))
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: wrapped C/C++ object of type QPushButton has been deleted
+2026-05-15 03:44:06 [CRITICAL] Uncaught exception
+Traceback (most recent call last):
+  File "E:\TorBox_Manager\dialogs.py", line 191, in _update_state
+    btn.setEnabled(bool(QApplication.clipboard().text().strip()))
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: wrapped C/C++ object of type QPushButton has been deleted
+2026-05-15 03:44:06 [CRITICAL] Uncaught exception
+Traceback (most recent call last):
+  File "E:\TorBox_Manager\dialogs.py", line 191, in _update_state
+    btn.setEnabled(bool(QApplication.clipboard().text().strip()))
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: wrapped C/C++ object of type QPushButton has been deleted
+2026-05-15 03:44:07 [DEBUG] https://api.torbox.app:443 "GET /v1/api/torrents/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:44:07 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:44:07 [DEBUG] https://api.torbox.app:443 "GET /v1/api/webdl/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:44:07 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:44:08 [DEBUG] https://api.torbox.app:443 "GET /v1/api/usenet/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:44:35 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:44:40 [DEBUG] https://api.torbox.app:443 "GET /v1/api/torrents/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:44:40 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:44:41 [DEBUG] https://api.torbox.app:443 "GET /v1/api/webdl/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:44:41 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:44:41 [DEBUG] https://api.torbox.app:443 "GET /v1/api/usenet/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:45:05 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:45:06 [DEBUG] https://api.torbox.app:443 "GET /v1/api/torrents/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:45:06 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:45:06 [DEBUG] https://api.torbox.app:443 "GET /v1/api/webdl/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:45:06 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:45:07 [DEBUG] https://api.torbox.app:443 "GET /v1/api/usenet/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:45:35 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:45:40 [DEBUG] https://api.torbox.app:443 "GET /v1/api/torrents/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:45:40 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:45:41 [DEBUG] https://api.torbox.app:443 "GET /v1/api/webdl/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:45:41 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:45:41 [DEBUG] https://api.torbox.app:443 "GET /v1/api/usenet/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:46:05 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:46:06 [DEBUG] https://api.torbox.app:443 "GET /v1/api/torrents/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:46:06 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:46:07 [DEBUG] https://api.torbox.app:443 "GET /v1/api/webdl/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:46:07 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:46:07 [DEBUG] https://api.torbox.app:443 "GET /v1/api/usenet/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:46:35 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:46:35 [DEBUG] https://api.torbox.app:443 "GET /v1/api/torrents/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:46:35 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:46:36 [DEBUG] https://api.torbox.app:443 "GET /v1/api/webdl/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:46:36 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:46:37 [DEBUG] https://api.torbox.app:443 "GET /v1/api/usenet/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:47:05 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:47:05 [DEBUG] https://api.torbox.app:443 "GET /v1/api/torrents/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:47:05 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:47:06 [DEBUG] https://api.torbox.app:443 "GET /v1/api/webdl/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:47:06 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:47:06 [DEBUG] https://api.torbox.app:443 "GET /v1/api/usenet/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:47:35 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:47:36 [DEBUG] https://api.torbox.app:443 "GET /v1/api/torrents/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:47:36 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:47:37 [DEBUG] https://api.torbox.app:443 "GET /v1/api/webdl/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:47:37 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:47:37 [DEBUG] https://api.torbox.app:443 "GET /v1/api/usenet/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:48:05 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:48:08 [DEBUG] https://api.torbox.app:443 "GET /v1/api/torrents/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:48:08 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:48:09 [DEBUG] https://api.torbox.app:443 "GET /v1/api/webdl/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:48:09 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:48:09 [DEBUG] https://api.torbox.app:443 "GET /v1/api/usenet/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:48:35 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:48:37 [DEBUG] https://api.torbox.app:443 "GET /v1/api/torrents/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:48:37 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:48:38 [DEBUG] https://api.torbox.app:443 "GET /v1/api/webdl/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:48:38 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:48:38 [DEBUG] https://api.torbox.app:443 "GET /v1/api/usenet/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:48:41 [CRITICAL] Uncaught exception
+Traceback (most recent call last):
+  File "E:\TorBox_Manager\dialogs.py", line 191, in _update_state
+    btn.setEnabled(bool(QApplication.clipboard().text().strip()))
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: wrapped C/C++ object of type QPushButton has been deleted
+2026-05-15 03:48:41 [CRITICAL] Uncaught exception
+Traceback (most recent call last):
+  File "E:\TorBox_Manager\dialogs.py", line 191, in _update_state
+    btn.setEnabled(bool(QApplication.clipboard().text().strip()))
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: wrapped C/C++ object of type QPushButton has been deleted
+2026-05-15 03:48:41 [CRITICAL] Uncaught exception
+Traceback (most recent call last):
+  File "E:\TorBox_Manager\dialogs.py", line 191, in _update_state
+    btn.setEnabled(bool(QApplication.clipboard().text().strip()))
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: wrapped C/C++ object of type QPushButton has been deleted
+2026-05-15 03:48:41 [CRITICAL] Uncaught exception
+Traceback (most recent call last):
+  File "E:\TorBox_Manager\dialogs.py", line 191, in _update_state
+    btn.setEnabled(bool(QApplication.clipboard().text().strip()))
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: wrapped C/C++ object of type QPushButton has been deleted
+2026-05-15 03:48:48 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:48:51 [DEBUG] https://api.torbox.app:443 "POST /v1/api/webdl/createwebdownload HTTP/1.1" 200 None
+2026-05-15 03:48:55 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:48:57 [DEBUG] https://api.torbox.app:443 "GET /v1/api/torrents/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:48:57 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:48:58 [DEBUG] https://api.torbox.app:443 "GET /v1/api/webdl/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:48:58 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:48:58 [DEBUG] https://api.torbox.app:443 "GET /v1/api/usenet/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:49:01 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:49:05 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:49:07 [DEBUG] https://api.torbox.app:443 "GET /v1/api/torrents/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:49:07 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:49:07 [DEBUG] https://api.torbox.app:443 "GET /v1/api/webdl/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:49:07 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:49:08 [DEBUG] https://api.torbox.app:443 "GET /v1/api/usenet/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:49:09 [DEBUG] https://api.torbox.app:443 "GET /v1/api/torrents/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:49:09 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:49:09 [DEBUG] https://api.torbox.app:443 "GET /v1/api/webdl/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:49:09 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:49:10 [DEBUG] https://api.torbox.app:443 "GET /v1/api/usenet/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:49:35 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:49:37 [DEBUG] https://api.torbox.app:443 "GET /v1/api/torrents/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:49:37 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:49:38 [DEBUG] https://api.torbox.app:443 "GET /v1/api/webdl/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:49:38 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:49:38 [DEBUG] https://api.torbox.app:443 "GET /v1/api/usenet/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:50:05 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:50:05 [DEBUG] https://api.torbox.app:443 "GET /v1/api/torrents/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:50:05 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:50:06 [DEBUG] https://api.torbox.app:443 "GET /v1/api/webdl/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:50:06 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:50:08 [DEBUG] https://api.torbox.app:443 "GET /v1/api/usenet/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:50:35 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:50:35 [DEBUG] https://api.torbox.app:443 "GET /v1/api/torrents/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:50:35 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:50:36 [DEBUG] https://api.torbox.app:443 "GET /v1/api/webdl/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:50:36 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:50:37 [DEBUG] https://api.torbox.app:443 "GET /v1/api/usenet/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:51:05 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:51:07 [DEBUG] https://api.torbox.app:443 "GET /v1/api/torrents/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:51:07 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:51:07 [DEBUG] https://api.torbox.app:443 "GET /v1/api/webdl/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:51:07 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:51:08 [DEBUG] https://api.torbox.app:443 "GET /v1/api/usenet/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:51:35 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:51:36 [DEBUG] https://api.torbox.app:443 "GET /v1/api/torrents/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:51:36 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:51:37 [DEBUG] https://api.torbox.app:443 "GET /v1/api/webdl/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:51:37 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:51:38 [DEBUG] https://api.torbox.app:443 "GET /v1/api/usenet/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:51:53 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:52:01 [DEBUG] https://api.torbox.app:443 "POST /v1/api/usenet/createusenetdownload HTTP/1.1" 200 None
+2026-05-15 03:52:05 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:52:05 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:52:11 [DEBUG] https://api.torbox.app:443 "GET /v1/api/torrents/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:52:11 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:52:11 [DEBUG] https://api.torbox.app:443 "GET /v1/api/torrents/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:52:11 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:52:11 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:52:11 [DEBUG] https://api.torbox.app:443 "GET /v1/api/webdl/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:52:11 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:52:11 [DEBUG] https://api.torbox.app:443 "GET /v1/api/webdl/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:52:11 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:52:11 [DEBUG] https://api.torbox.app:443 "GET /v1/api/torrents/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:52:11 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:52:12 [DEBUG] https://api.torbox.app:443 "GET /v1/api/usenet/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:52:12 [DEBUG] https://api.torbox.app:443 "GET /v1/api/usenet/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:52:12 [DEBUG] https://api.torbox.app:443 "GET /v1/api/webdl/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:52:12 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:52:12 [DEBUG] https://api.torbox.app:443 "GET /v1/api/usenet/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:52:35 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:52:36 [DEBUG] https://api.torbox.app:443 "GET /v1/api/torrents/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:52:36 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:52:38 [DEBUG] https://api.torbox.app:443 "GET /v1/api/webdl/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:52:38 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:52:38 [DEBUG] https://api.torbox.app:443 "GET /v1/api/usenet/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:53:03 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:53:05 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:53:06 [DEBUG] https://api.torbox.app:443 "GET /v1/api/torrents/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:53:06 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:53:06 [DEBUG] https://api.torbox.app:443 "GET /v1/api/webdl/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:53:06 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:53:07 [DEBUG] https://api.torbox.app:443 "GET /v1/api/usenet/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:53:18 [DEBUG] https://api.torbox.app:443 "POST /v1/api/usenet/createusenetdownload HTTP/1.1" 200 None
+2026-05-15 03:53:22 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:53:26 [DEBUG] https://api.torbox.app:443 "GET /v1/api/torrents/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:53:26 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:53:27 [DEBUG] https://api.torbox.app:443 "GET /v1/api/webdl/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:53:27 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:53:28 [DEBUG] https://api.torbox.app:443 "GET /v1/api/usenet/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:53:28 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:53:30 [DEBUG] https://api.torbox.app:443 "GET /v1/api/torrents/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:53:30 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:53:31 [DEBUG] https://api.torbox.app:443 "GET /v1/api/webdl/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:53:31 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:53:31 [DEBUG] https://api.torbox.app:443 "GET /v1/api/usenet/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:53:35 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:53:35 [DEBUG] https://api.torbox.app:443 "GET /v1/api/torrents/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:53:35 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:53:36 [DEBUG] https://api.torbox.app:443 "GET /v1/api/webdl/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:53:36 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:53:36 [DEBUG] https://api.torbox.app:443 "GET /v1/api/usenet/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:54:05 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:54:05 [DEBUG] https://api.torbox.app:443 "GET /v1/api/torrents/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:54:05 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:54:06 [DEBUG] https://api.torbox.app:443 "GET /v1/api/webdl/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:54:06 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:54:06 [DEBUG] https://api.torbox.app:443 "GET /v1/api/usenet/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:54:35 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:54:37 [DEBUG] https://api.torbox.app:443 "GET /v1/api/torrents/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:54:37 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:54:37 [DEBUG] https://api.torbox.app:443 "GET /v1/api/webdl/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:54:37 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:54:38 [DEBUG] https://api.torbox.app:443 "GET /v1/api/usenet/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:54:41 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:54:51 [DEBUG] https://api.torbox.app:443 "POST /v1/api/usenet/createusenetdownload HTTP/1.1" 200 None
+2026-05-15 03:54:55 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:54:55 [DEBUG] https://api.torbox.app:443 "GET /v1/api/torrents/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:54:55 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:54:56 [DEBUG] https://api.torbox.app:443 "GET /v1/api/webdl/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:54:56 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:54:57 [DEBUG] https://api.torbox.app:443 "GET /v1/api/usenet/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:55:01 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:55:05 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:55:07 [DEBUG] https://api.torbox.app:443 "GET /v1/api/torrents/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:55:07 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:55:07 [DEBUG] https://api.torbox.app:443 "GET /v1/api/torrents/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:55:07 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:55:07 [DEBUG] https://api.torbox.app:443 "GET /v1/api/webdl/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:55:07 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:55:08 [DEBUG] https://api.torbox.app:443 "GET /v1/api/usenet/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:55:08 [DEBUG] https://api.torbox.app:443 "GET /v1/api/webdl/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:55:08 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:55:08 [DEBUG] https://api.torbox.app:443 "GET /v1/api/usenet/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:55:35 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:55:36 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:55:38 [DEBUG] https://api.torbox.app:443 "POST /v1/api/usenet/controlusenetdownload HTTP/1.1" 200 None
+2026-05-15 03:55:38 [DEBUG] https://api.torbox.app:443 "GET /v1/api/torrents/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:55:38 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:55:40 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:55:40 [DEBUG] https://api.torbox.app:443 "POST /v1/api/usenet/controlusenetdownload HTTP/1.1" 500 281
+2026-05-15 03:55:44 [DEBUG] https://api.torbox.app:443 "GET /v1/api/webdl/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:55:44 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:55:44 [DEBUG] https://api.torbox.app:443 "GET /v1/api/usenet/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:56:05 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:56:05 [DEBUG] https://api.torbox.app:443 "GET /v1/api/torrents/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:56:05 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:56:06 [CRITICAL] Uncaught exception
+Traceback (most recent call last):
+  File "E:\TorBox_Manager\dialogs.py", line 191, in _update_state
+    btn.setEnabled(bool(QApplication.clipboard().text().strip()))
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: wrapped C/C++ object of type QPushButton has been deleted
+2026-05-15 03:56:06 [CRITICAL] Uncaught exception
+Traceback (most recent call last):
+  File "E:\TorBox_Manager\dialogs.py", line 191, in _update_state
+    btn.setEnabled(bool(QApplication.clipboard().text().strip()))
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: wrapped C/C++ object of type QPushButton has been deleted
+2026-05-15 03:56:06 [CRITICAL] Uncaught exception
+Traceback (most recent call last):
+  File "E:\TorBox_Manager\dialogs.py", line 191, in _update_state
+    btn.setEnabled(bool(QApplication.clipboard().text().strip()))
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: wrapped C/C++ object of type QPushButton has been deleted
+2026-05-15 03:56:06 [DEBUG] https://api.torbox.app:443 "GET /v1/api/webdl/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:56:06 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:56:06 [CRITICAL] Uncaught exception
+Traceback (most recent call last):
+  File "E:\TorBox_Manager\dialogs.py", line 191, in _update_state
+    btn.setEnabled(bool(QApplication.clipboard().text().strip()))
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: wrapped C/C++ object of type QPushButton has been deleted
+2026-05-15 03:56:06 [CRITICAL] Uncaught exception
+Traceback (most recent call last):
+  File "E:\TorBox_Manager\dialogs.py", line 191, in _update_state
+    btn.setEnabled(bool(QApplication.clipboard().text().strip()))
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: wrapped C/C++ object of type QPushButton has been deleted
+2026-05-15 03:56:06 [CRITICAL] Uncaught exception
+Traceback (most recent call last):
+  File "E:\TorBox_Manager\dialogs.py", line 191, in _update_state
+    btn.setEnabled(bool(QApplication.clipboard().text().strip()))
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: wrapped C/C++ object of type QPushButton has been deleted
+2026-05-15 03:56:06 [CRITICAL] Uncaught exception
+Traceback (most recent call last):
+  File "E:\TorBox_Manager\dialogs.py", line 191, in _update_state
+    btn.setEnabled(bool(QApplication.clipboard().text().strip()))
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: wrapped C/C++ object of type QPushButton has been deleted
+2026-05-15 03:56:06 [CRITICAL] Uncaught exception
+Traceback (most recent call last):
+  File "E:\TorBox_Manager\dialogs.py", line 191, in _update_state
+    btn.setEnabled(bool(QApplication.clipboard().text().strip()))
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: wrapped C/C++ object of type QPushButton has been deleted
+2026-05-15 03:56:06 [CRITICAL] Uncaught exception
+Traceback (most recent call last):
+  File "E:\TorBox_Manager\dialogs.py", line 191, in _update_state
+    btn.setEnabled(bool(QApplication.clipboard().text().strip()))
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: wrapped C/C++ object of type QPushButton has been deleted
+2026-05-15 03:56:06 [CRITICAL] Uncaught exception
+Traceback (most recent call last):
+  File "E:\TorBox_Manager\dialogs.py", line 191, in _update_state
+    btn.setEnabled(bool(QApplication.clipboard().text().strip()))
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: wrapped C/C++ object of type QPushButton has been deleted
+2026-05-15 03:56:06 [CRITICAL] Uncaught exception
+Traceback (most recent call last):
+  File "E:\TorBox_Manager\dialogs.py", line 191, in _update_state
+    btn.setEnabled(bool(QApplication.clipboard().text().strip()))
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: wrapped C/C++ object of type QPushButton has been deleted
+2026-05-15 03:56:06 [CRITICAL] Uncaught exception
+Traceback (most recent call last):
+  File "E:\TorBox_Manager\dialogs.py", line 191, in _update_state
+    btn.setEnabled(bool(QApplication.clipboard().text().strip()))
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: wrapped C/C++ object of type QPushButton has been deleted
+2026-05-15 03:56:06 [DEBUG] https://api.torbox.app:443 "GET /v1/api/usenet/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:56:27 [CRITICAL] Uncaught exception
+Traceback (most recent call last):
+  File "E:\TorBox_Manager\dialogs.py", line 191, in _update_state
+    btn.setEnabled(bool(QApplication.clipboard().text().strip()))
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: wrapped C/C++ object of type QPushButton has been deleted
+2026-05-15 03:56:27 [CRITICAL] Uncaught exception
+Traceback (most recent call last):
+  File "E:\TorBox_Manager\dialogs.py", line 191, in _update_state
+    btn.setEnabled(bool(QApplication.clipboard().text().strip()))
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: wrapped C/C++ object of type QPushButton has been deleted
+2026-05-15 03:56:27 [CRITICAL] Uncaught exception
+Traceback (most recent call last):
+  File "E:\TorBox_Manager\dialogs.py", line 191, in _update_state
+    btn.setEnabled(bool(QApplication.clipboard().text().strip()))
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: wrapped C/C++ object of type QPushButton has been deleted
+2026-05-15 03:56:35 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:56:37 [DEBUG] https://api.torbox.app:443 "GET /v1/api/torrents/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:56:37 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:56:41 [DEBUG] https://api.torbox.app:443 "GET /v1/api/webdl/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:56:41 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:56:41 [DEBUG] https://api.torbox.app:443 "GET /v1/api/usenet/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:57:05 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:57:10 [DEBUG] https://api.torbox.app:443 "GET /v1/api/torrents/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:57:10 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:57:11 [DEBUG] https://api.torbox.app:443 "GET /v1/api/webdl/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:57:11 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:57:11 [DEBUG] https://api.torbox.app:443 "GET /v1/api/usenet/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:57:35 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:57:40 [DEBUG] https://api.torbox.app:443 "GET /v1/api/torrents/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:57:40 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:57:41 [DEBUG] https://api.torbox.app:443 "GET /v1/api/webdl/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:57:41 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:57:42 [DEBUG] https://api.torbox.app:443 "GET /v1/api/usenet/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:58:05 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:58:07 [DEBUG] https://api.torbox.app:443 "GET /v1/api/torrents/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:58:07 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:58:10 [DEBUG] https://api.torbox.app:443 "GET /v1/api/webdl/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:58:10 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:58:11 [DEBUG] https://api.torbox.app:443 "GET /v1/api/usenet/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:58:33 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:58:34 [DEBUG] https://api.torbox.app:443 "POST /v1/api/torrents/controltorrent HTTP/1.1" 200 None
+2026-05-15 03:58:35 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:58:35 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:58:36 [DEBUG] https://api.torbox.app:443 "POST /v1/api/torrents/controltorrent HTTP/1.1" 200 None
+2026-05-15 03:58:37 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:58:38 [DEBUG] https://api.torbox.app:443 "GET /v1/api/torrents/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:58:38 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:58:38 [DEBUG] https://api.torbox.app:443 "POST /v1/api/torrents/controltorrent HTTP/1.1" 200 None
+2026-05-15 03:58:38 [DEBUG] https://api.torbox.app:443 "GET /v1/api/webdl/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:58:38 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:58:38 [DEBUG] https://api.torbox.app:443 "GET /v1/api/usenet/mylist?bypass_cache=true HTTP/1.1" 200 None
+2026-05-15 03:58:39 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:58:39 [DEBUG] https://api.torbox.app:443 "POST /v1/api/torrents/controltorrent HTTP/1.1" 200 None
+2026-05-15 03:58:41 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:58:41 [DEBUG] https://api.torbox.app:443 "POST /v1/api/torrents/controltorrent HTTP/1.1" 200 None
+2026-05-15 03:58:43 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:58:44 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:58:44 [DEBUG] https://api.torbox.app:443 "POST /v1/api/torrents/controltorrent HTTP/1.1" 200 None
+2026-05-15 03:58:45 [DEBUG] https://api.torbox.app:443 "POST /v1/api/webdl/controlwebdownload HTTP/1.1" 200 None
+2026-05-15 03:58:46 [DEBUG] Starting new HTTPS connection (1): api.torbox.app:443
+2026-05-15 03:58:47 [DEBUG] https://api.torbox.app:443 "POST /v1/api/usenet/controlusenetdownload HTTP/1.1" 200 None
+2026-05-15 03:58:52 [INFO] TorBox Manager exiting with code 0
