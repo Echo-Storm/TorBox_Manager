@@ -59,22 +59,38 @@ from constants import (
     APP_NAME,
     APP_SUBTITLE,
     APP_VERSION,
+    BADGE_COLORS,
     COLOR_ACCENT,
+    COLOR_ACCENT_DIM,
     COLOR_BG,
     COLOR_BORDER,
+    COLOR_BORDER_BRIGHT,
     COLOR_BUTTON_BG,
     COLOR_BUTTON_HOVER,
     COLOR_HEADER_BAR,
     COLOR_PANEL,
+    COLOR_PANEL_ALT,
+    COLOR_ROW_HOVER,
     COLOR_TEXT,
     COLOR_TEXT_MUTED,
+    STATUS_COLORS,
+    STATUS_DISPLAY,
+    COL_ADDED,
+    COL_COUNT,
     COL_DELETE,
     COL_DOWNLOAD,
+    COL_ETA,
     COL_NAME,
+    COL_PEERS,
     COL_PROGRESS,
+    COL_RATIO,
+    COL_SEEDS,
     COL_SIZE,
     COL_STATUS,
     COL_TYPE,
+    COL_HEADERS,
+    COL_VISIBILITY_DEFAULTS,
+    COL_VISIBILITY_KEYS,
     DOWNLOAD_CHUNK_SIZE,
     FONT_LOG_FAMILY,
     FONT_LOG_SIZE,
@@ -117,7 +133,8 @@ MAIN_STYLE = f"""
         color: {COLOR_TEXT};
         gridline-color: {COLOR_BORDER};
         border: none;
-        selection-background-color: #2a3a1a;
+        selection-background-color: {COLOR_ROW_HOVER};
+        alternate-background-color: {COLOR_PANEL_ALT};
         outline: none;
     }}
     QTableWidget::item {{
@@ -125,18 +142,27 @@ MAIN_STYLE = f"""
         border: none;
     }}
     QTableWidget::item:selected {{
-        background-color: #2a3a1a;
+        background-color: {COLOR_ROW_HOVER};
         color: {COLOR_TEXT};
+    }}
+    QTableWidget::item:hover {{
+        background-color: {COLOR_ROW_HOVER};
     }}
     QHeaderView::section {{
         background-color: {COLOR_PANEL};
         color: {COLOR_ACCENT};
         border: none;
+        border-top: 1px solid {COLOR_BORDER_BRIGHT};
         border-right: 1px solid {COLOR_BORDER};
-        border-bottom: 1px solid {COLOR_BORDER};
-        padding: 4px 6px;
+        border-bottom: 1px solid {COLOR_BORDER_BRIGHT};
+        padding: 5px 6px;
         font-size: 8pt;
         font-weight: bold;
+        letter-spacing: 1px;
+    }}
+    QHeaderView::section:hover {{
+        background-color: {COLOR_PANEL_ALT};
+        color: {COLOR_ACCENT};
     }}
     QPushButton {{
         background-color: {COLOR_BUTTON_BG};
@@ -147,62 +173,70 @@ MAIN_STYLE = f"""
     }}
     QPushButton:hover {{
         background-color: {COLOR_BUTTON_HOVER};
-        border-color: {COLOR_ACCENT};
+        border-color: {COLOR_ACCENT_DIM};
     }}
     QPushButton:pressed {{
         background-color: {COLOR_ACCENT};
         color: #000000;
     }}
     QPushButton:disabled {{
-        color: #555555;
-        border-color: #333333;
+        color: #3a3a3a;
+        border-color: {COLOR_BORDER};
+        background-color: {COLOR_BG};
     }}
     QProgressBar {{
         background-color: {COLOR_PANEL};
         border: 1px solid {COLOR_BORDER};
-        border-radius: 2px;
+        border-radius: 4px;
         text-align: center;
         color: {COLOR_TEXT};
-        font-size: 7pt;
+        font-size: 8pt;
+        font-weight: bold;
+        min-height: 20px;
     }}
     QProgressBar::chunk {{
-        background-color: {COLOR_ACCENT};
-        border-radius: 2px;
+        background-color: qlineargradient(
+            x1:0, y1:0, x2:1, y2:0,
+            stop:0 {COLOR_ACCENT_DIM},
+            stop:1 {COLOR_ACCENT}
+        );
+        border-radius: 4px;
+        margin: 1px;
     }}
     QStatusBar {{
         background-color: {COLOR_PANEL};
         color: {COLOR_TEXT_MUTED};
-        border-top: 1px solid {COLOR_BORDER};
+        border-top: 1px solid {COLOR_BORDER_BRIGHT};
         font-size: 8pt;
     }}
     QScrollBar:vertical {{
         background-color: {COLOR_BG};
-        width: 10px;
+        width: 8px;
         border: none;
     }}
     QScrollBar::handle:vertical {{
-        background-color: #444444;
-        border-radius: 5px;
+        background-color: #303030;
+        border-radius: 4px;
         min-height: 20px;
     }}
     QScrollBar::handle:vertical:hover {{
-        background-color: {COLOR_ACCENT};
+        background-color: {COLOR_ACCENT_DIM};
     }}
     QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
         height: 0px;
     }}
     QScrollBar:horizontal {{
         background-color: {COLOR_BG};
-        height: 10px;
+        height: 8px;
         border: none;
     }}
     QScrollBar::handle:horizontal {{
-        background-color: #444444;
-        border-radius: 5px;
+        background-color: #303030;
+        border-radius: 4px;
         min-width: 20px;
     }}
     QScrollBar::handle:horizontal:hover {{
-        background-color: {COLOR_ACCENT};
+        background-color: {COLOR_ACCENT_DIM};
     }}
     QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{
         width: 0px;
@@ -213,32 +247,44 @@ _PROGRESS_BAR_DONE_STYLE = f"""
     QProgressBar {{
         background-color: {COLOR_PANEL};
         border: 1px solid {COLOR_ACCENT};
-        border-radius: 2px;
+        border-radius: 4px;
         text-align: center;
         color: #000000;
-        font-size: 7pt;
+        font-size: 8pt;
         font-weight: bold;
+        min-height: 20px;
     }}
     QProgressBar::chunk {{
-        background-color: {COLOR_ACCENT};
-        border-radius: 2px;
+        background-color: qlineargradient(
+            x1:0, y1:0, x2:1, y2:0,
+            stop:0 {COLOR_ACCENT_DIM}, stop:1 {COLOR_ACCENT}
+        );
+        border-radius: 4px;
+        margin: 1px;
     }}
 """
 
 _PROGRESS_BAR_ACTIVE_STYLE = f"""
     QProgressBar {{
         background-color: {COLOR_PANEL};
-        border: 1px solid {COLOR_BORDER};
-        border-radius: 2px;
+        border: 1px solid {COLOR_BORDER_BRIGHT};
+        border-radius: 4px;
         text-align: center;
         color: {COLOR_TEXT};
-        font-size: 7pt;
+        font-size: 8pt;
+        font-weight: bold;
+        min-height: 20px;
     }}
     QProgressBar::chunk {{
-        background-color: {COLOR_ACCENT};
-        border-radius: 2px;
+        background-color: qlineargradient(
+            x1:0, y1:0, x2:1, y2:0,
+            stop:0 {COLOR_ACCENT_DIM}, stop:1 {COLOR_ACCENT}
+        );
+        border-radius: 4px;
+        margin: 1px;
     }}
 """
+
 
 
 # ---------------------------------------------------------------------------
@@ -260,29 +306,100 @@ def _fmt_size(size_bytes) -> str:
     return f"{b / 1024 ** 3:.2f} GB"
 
 
-def _torbox_state_to_status(download_state: str) -> str:
+def _torbox_state_to_status(item: dict) -> str:
     """
-    Map a TorBox download_state string to one of our STATUS_* constants.
-
-    Assumption: these are the states TorBox returns. Verify against live
-    API responses — field name may differ (e.g. 'status' instead of
-    'download_state'). Add new mappings here as discovered.
+    Return the internal STATUS_* constant for an item.
+    Used for logic decisions (enable Download button, etc.)
+    For display text use _torbox_display_status().
     """
-    s = str(download_state).lower()
-    if s in ("completed", "seeding", "cached", "paused_upload"):
+    if item.get("cached") is True:
         return STATUS_READY
-    if s in ("downloading", "uploading", "checking", "checkingresumedata",
-             "moving", "fetching"):
-        return STATUS_DOWNLOADING
-    if s in ("error", "missingfiles", "failed"):
+
+    download_state = str(item.get("download_state", "")).lower()
+
+    if any(s in download_state for s in ("error", "missing", "failed")):
         return STATUS_ERROR
-    # Everything else (queued, waiting, stalled, paused, metadl, etc.)
+
+    if any(s in download_state for s in ("downloading", "checking",
+                                          "moving", "fetching", "metadl")):
+        return STATUS_DOWNLOADING
+
     return STATUS_QUEUED
+
+
+def _torbox_display_status(item: dict) -> str:
+    """
+    Return a human-readable compound status string for the Status column.
+    Distinguishes cached+seeding from cached+idle, which STATUS_READY alone
+    does not.
+    """
+    if item.get("cached") is True:
+        state = str(item.get("download_state", "")).lower()
+        if any(s in state for s in ("uploading", "seeding")):
+            return STATUS_DISPLAY["cached_seeding"]
+        return STATUS_DISPLAY["cached_idle"]
+
+    download_state = str(item.get("download_state", "")).lower()
+
+    if any(s in download_state for s in ("error", "missing", "failed")):
+        return STATUS_DISPLAY["error"]
+
+    if any(s in download_state for s in ("downloading", "checking",
+                                          "moving", "fetching", "metadl")):
+        return STATUS_DISPLAY["downloading"]
+
+    return STATUS_DISPLAY["queued"]
 
 
 def _row_key(item: dict) -> str:
     """Stable unique key for a queue item — used to match rows across polls."""
     return f"{item.get('source_type', 'unknown')}:{item.get('id', 0)}"
+
+
+def _fmt_eta(seconds) -> str:
+    """Convert ETA in seconds to a readable string."""
+    try:
+        s = int(seconds)
+    except (TypeError, ValueError):
+        return "—"
+    if s <= 0:
+        return "—"
+    if s < 60:
+        return f"{s}s"
+    if s < 3600:
+        return f"{s // 60}m {s % 60}s"
+    if s < 86400:
+        h = s // 3600
+        m = (s % 3600) // 60
+        return f"{h}h {m}m"
+    return f"{s // 86400}d"
+
+
+def _fmt_added(iso_str: str) -> str:
+    """Convert an ISO8601 timestamp to a short local time string."""
+    if not iso_str:
+        return "—"
+    try:
+        from datetime import timezone
+        dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
+        local = dt.astimezone()
+        return local.strftime("%m/%d %H:%M")
+    except (ValueError, OSError):
+        return iso_str[:16]
+
+
+def _make_badge(source_type: str) -> QLabel:
+    """Return a styled QLabel badge for the Type column."""
+    label_text = TYPE_ICONS.get(source_type, "?") + "  " + source_type.capitalize()
+    bg, fg     = BADGE_COLORS.get(source_type, ("#333333", "#e0e0e0"))
+    badge      = QLabel(label_text)
+    badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    badge.setStyleSheet(
+        f"background-color: {bg}; color: {fg}; "
+        f"border-radius: 3px; padding: 2px 8px; "
+        f"font-size: 8pt; font-weight: bold;"
+    )
+    return badge
 
 
 # ---------------------------------------------------------------------------
@@ -292,8 +409,8 @@ def _row_key(item: dict) -> str:
 def _section_label(text: str) -> QLabel:
     lbl = QLabel(text.upper())
     lbl.setStyleSheet(
-        f"color: {COLOR_ACCENT}; font-size: 8pt; font-weight: bold; "
-        f"padding-top: 8px; padding-bottom: 2px;"
+        f"color: {COLOR_ACCENT_DIM}; font-size: 7pt; font-weight: bold; "
+        f"letter-spacing: 2px; padding: 10px 0 4px 0; background: transparent;"
     )
     return lbl
 
@@ -315,6 +432,9 @@ class MainWindow(QMainWindow):
         self._row_items: dict[str, dict] = {}
         # Tracks which row_keys currently have a DownloadWorker running
         self._downloading: set[str] = set()
+        # Keys deleted by the user — suppressed for 2 poll cycles so they
+        # don't reappear before TorBox finishes processing the delete.
+        self._deleted_keys: set[str] = set()
 
         self._build_ui()
         self._build_tray()
@@ -345,66 +465,192 @@ class MainWindow(QMainWindow):
         root_layout.addWidget(self._build_header())
 
         # Body: left panel + right content side by side
+        # Wrap body in a container with left/right margins so content sits
+        # inset from the header edges — header overhangs, body feels contained
+        body_container = QWidget()
+        body_container.setStyleSheet("background-color: transparent;")
+        body_outer = QHBoxLayout(body_container)
+        body_outer.setContentsMargins(0, 0, 8, 0)
+        body_outer.setSpacing(0)
+
         body_splitter = QSplitter(Qt.Orientation.Horizontal)
         body_splitter.setHandleWidth(2)
         body_splitter.addWidget(self._build_left_panel())
         body_splitter.addWidget(self._build_right_panel())
-        body_splitter.setSizes([280, 920])
+        body_splitter.setSizes([220, 980])
         body_splitter.setStretchFactor(0, 0)
         body_splitter.setStretchFactor(1, 1)
-        root_layout.addWidget(body_splitter, stretch=1)
+
+        body_outer.addWidget(body_splitter)
+        root_layout.addWidget(body_container, stretch=1)
 
         # Status bar
         self._build_status_bar()
 
     def _build_header(self) -> QWidget:
-        """Amber header bar with centred app title — matches EAC."""
+        """
+        Futuristic header bar.
+        Layout: [v0.2.0] ——————— | TORBOX MANAGER | ——————— [ECHOSTORM EDITION]
+        Version left, subtitle right, both small and dimmed.
+        Vertical bar separators flank the title.
+        Full-width accent lines connect everything.
+        """
+        outer = QWidget()
+        outer.setFixedHeight(72)
+        outer.setStyleSheet(f"""
+            QWidget {{
+                background-color: {COLOR_PANEL};
+                border-top: 1px solid {COLOR_ACCENT};
+                border-bottom: 2px solid {COLOR_ACCENT};
+            }}
+        """)
+
+        outer_layout = QVBoxLayout(outer)
+        outer_layout.setContentsMargins(0, 0, 0, 0)
+        outer_layout.setSpacing(0)
+
         bar = QWidget()
-        bar.setFixedHeight(52)
-        bar.setStyleSheet(f"background-color: {COLOR_HEADER_BAR};")
+        bar.setStyleSheet(f"background-color: {COLOR_PANEL}; border: none;")
         layout = QHBoxLayout(bar)
-        layout.setContentsMargins(14, 0, 14, 0)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
 
-        # Decorative left ticks (purely cosmetic, mirrors EAC)
-        left_deco = QLabel("/ /")
-        left_deco.setStyleSheet(f"color: #5a4010; font-size: 14pt;")
-        layout.addWidget(left_deco)
+        # Left — version number, small, dimmed accent
+        version = QLabel(f"v{APP_VERSION}")
+        version.setFixedWidth(52)
+        version.setStyleSheet(f"""
+            color: {COLOR_ACCENT};
+            font-size: 7pt;
+            font-weight: bold;
+            letter-spacing: 2px;
+            border: none;
+        """)
+        version.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        layout.addWidget(version)
 
-        # Thin green line left
+        # Left accent line — runs from version to left separator bar
         left_line = QWidget()
-        left_line.setFixedHeight(2)
-        left_line.setStyleSheet(f"background-color: {COLOR_ACCENT};")
+        left_line.setFixedHeight(1)
+        left_line.setStyleSheet(f"background-color: {COLOR_ACCENT_DIM}; border: none;")
         layout.addWidget(left_line, stretch=1)
 
+        # Left vertical separator bar
+        left_sep = QLabel("  |  ")
+        left_sep.setStyleSheet(f"""
+            color: {COLOR_ACCENT_DIM};
+            font-size: 16pt;
+            font-weight: 100;
+            border: none;
+            padding: 8px 0;
+            letter-spacing: 0px;
+        """)
+        left_sep.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+        layout.addWidget(left_sep)
+
+        # Center title — white for maximum legibility, tight tracking, heavy weight
         title = QLabel(APP_NAME.upper())
-        title.setFont(QFont(FONT_UI_FAMILY, 18, QFont.Weight.Bold))
-        title.setStyleSheet(f"color: {COLOR_ACCENT}; letter-spacing: 4px;")
+        title.setFont(QFont("Segoe UI Semibold", 32, QFont.Weight.Black))
+        title.setStyleSheet(f"""
+            color: #c8c8c8;
+            letter-spacing: 6px;
+            border: none;
+            padding: 0 8px;
+        """)
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(title)
 
+        # Right vertical separator bar
+        right_sep = QLabel("  |  ")
+        right_sep.setStyleSheet(f"""
+            color: {COLOR_ACCENT_DIM};
+            font-size: 16pt;
+            font-weight: 100;
+            border: none;
+            padding: 8px 0;
+            letter-spacing: 0px;
+        """)
+        right_sep.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+        layout.addWidget(right_sep)
+
+        # Right accent line — runs from right separator to subtitle
         right_line = QWidget()
-        right_line.setFixedHeight(2)
-        right_line.setStyleSheet(f"background-color: {COLOR_ACCENT};")
+        right_line.setFixedHeight(1)
+        right_line.setStyleSheet(f"background-color: {COLOR_ACCENT_DIM}; border: none;")
         layout.addWidget(right_line, stretch=1)
 
-        right_deco = QLabel("\\ \\")
-        right_deco.setStyleSheet(f"color: #5a4010; font-size: 14pt;")
-        layout.addWidget(right_deco)
+        # Right — EchoStorm Edition, small, dimmed, right-aligned
+        subtitle = QLabel(APP_SUBTITLE.upper())
+        subtitle.setFixedWidth(150)
+        subtitle.setStyleSheet(f"""
+            color: {COLOR_ACCENT_DIM};
+            font-size: 6pt;
+            font-weight: bold;
+            letter-spacing: 3px;
+            border: none;
+        """)
+        subtitle.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        layout.addWidget(subtitle)
 
-        return bar
+        outer_layout.addWidget(bar)
+        return outer
 
     def _build_left_panel(self) -> QWidget:
         """Fixed-width left panel: add buttons + queue controls + settings."""
         panel = QWidget()
-        panel.setFixedWidth(280)
-        panel.setStyleSheet(f"background-color: {COLOR_PANEL};")
+        panel.setFixedWidth(220)
+        panel.setStyleSheet(f"""
+            QWidget {{
+                background-color: {COLOR_PANEL};
+                border-right: 1px solid {COLOR_BORDER_BRIGHT};
+            }}
+            QPushButton {{
+                background-color: {COLOR_BUTTON_BG};
+                color: {COLOR_TEXT_MUTED};
+                border: 1px solid {COLOR_BORDER};
+                border-left: 2px solid transparent;
+                border-radius: 3px;
+                padding: 5px 10px 5px 10px;
+                text-align: left;
+                font-size: 9pt;
+                margin: 0px 8px;
+            }}
+            QPushButton:hover {{
+                background-color: {COLOR_PANEL_ALT};
+                border: 1px solid {COLOR_BORDER_BRIGHT};
+                border-left: 2px solid {COLOR_ACCENT};
+                color: {COLOR_TEXT};
+            }}
+            QPushButton:pressed {{
+                background-color: {COLOR_BG};
+                border-left: 2px solid {COLOR_ACCENT};
+                color: {COLOR_ACCENT};
+            }}
+            QPushButton#settings_btn {{
+                background-color: transparent;
+                color: {COLOR_TEXT_MUTED};
+                border: none;
+                border-top: 1px solid {COLOR_BORDER};
+                border-left: 2px solid transparent;
+                border-radius: 0px;
+                padding: 8px 10px 8px 12px;
+                text-align: left;
+                font-size: 8pt;
+                margin: 0px;
+            }}
+            QPushButton#settings_btn:hover {{
+                background-color: {COLOR_PANEL_ALT};
+                border-top: 1px solid {COLOR_BORDER};
+                border-left: 2px solid {COLOR_ACCENT_DIM};
+                color: {COLOR_TEXT};
+            }}
+        """)
 
         layout = QVBoxLayout(panel)
-        layout.setContentsMargins(12, 8, 12, 12)
-        layout.setSpacing(4)
+        layout.setContentsMargins(0, 10, 0, 0)
+        layout.setSpacing(3)
 
         # ---- ADD ----
-        layout.addWidget(_section_label("Add"))
+        layout.addWidget(_section_label("  Add"))
 
         for label, slot in [
             ("🧲  Add Magnet",      self._on_add_magnet),
@@ -413,35 +659,35 @@ class MainWindow(QMainWindow):
             ("📰  Add NZB",         self._on_add_nzb),
         ]:
             btn = QPushButton(label)
-            btn.setMinimumHeight(32)
+            btn.setMinimumHeight(30)
             btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
             btn.clicked.connect(slot)
             layout.addWidget(btn)
 
         # ---- QUEUE ----
-        layout.addWidget(_section_label("Queue"))
+        layout.addWidget(_section_label("  Queue"))
 
         self._refresh_btn = QPushButton("↻  Refresh Now")
-        self._refresh_btn.setMinimumHeight(30)
+        self._refresh_btn.setMinimumHeight(28)
         self._refresh_btn.clicked.connect(self._on_refresh)
         layout.addWidget(self._refresh_btn)
 
-        clear_done_btn = QPushButton("Clear Completed")
-        clear_done_btn.setMinimumHeight(30)
+        clear_done_btn = QPushButton("✓  Clear Completed")
+        clear_done_btn.setMinimumHeight(28)
         clear_done_btn.clicked.connect(self._on_clear_done)
         layout.addWidget(clear_done_btn)
 
-        clear_all_btn = QPushButton("Clear All")
-        clear_all_btn.setMinimumHeight(30)
+        clear_all_btn = QPushButton("✕  Clear All")
+        clear_all_btn.setMinimumHeight(28)
         clear_all_btn.clicked.connect(self._on_clear_all)
         layout.addWidget(clear_all_btn)
 
-        # ---- SETTINGS ----
-        layout.addWidget(_section_label(""))
         layout.addStretch()
 
-        settings_btn = QPushButton("⚙  Settings")
-        settings_btn.setMinimumHeight(30)
+        # ---- SETTINGS — differentiated bottom button ----
+        settings_btn = QPushButton("⚙   Settings")
+        settings_btn.setObjectName("settings_btn")
+        settings_btn.setMinimumHeight(34)
         settings_btn.clicked.connect(self._on_settings)
         layout.addWidget(settings_btn)
 
@@ -450,6 +696,7 @@ class MainWindow(QMainWindow):
     def _build_right_panel(self) -> QWidget:
         """Right side: queue table (top) + log strip (bottom)."""
         right = QWidget()
+        right.setStyleSheet(f"border-right: 1px solid {COLOR_BORDER_BRIGHT};")
         layout = QVBoxLayout(right)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
@@ -473,18 +720,15 @@ class MainWindow(QMainWindow):
     def _build_queue_table(self) -> QWidget:
         """
         QTableWidget with one row per queued TorBox item.
-        Columns: Name | Type | Status | Size | Progress | Download | Delete
-        # TODO v0.2: Seeders, Added, ETA columns (right-click header to show/hide)
+        Core columns always visible. Optional columns toggled via right-click header.
         """
         self._table = QTableWidget()
-        self._table.setColumnCount(7)
-        self._table.setHorizontalHeaderLabels([
-            "Name", "Type", "Status", "Size", "Progress", "Download", "Delete"
-        ])
+        self._table.setColumnCount(COL_COUNT)
+        self._table.setHorizontalHeaderLabels(COL_HEADERS)
         self._table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self._table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
         self._table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        self._table.setAlternatingRowColors(False)
+        self._table.setAlternatingRowColors(True)
         self._table.setShowGrid(True)
         self._table.verticalHeader().setVisible(False)
         self._table.horizontalHeader().setStretchLastSection(False)
@@ -495,20 +739,108 @@ class MainWindow(QMainWindow):
         hdr.setSectionResizeMode(COL_TYPE,     QHeaderView.ResizeMode.Fixed)
         hdr.setSectionResizeMode(COL_STATUS,   QHeaderView.ResizeMode.Fixed)
         hdr.setSectionResizeMode(COL_SIZE,     QHeaderView.ResizeMode.Fixed)
+        hdr.setSectionResizeMode(COL_SEEDS,    QHeaderView.ResizeMode.Fixed)
+        hdr.setSectionResizeMode(COL_PEERS,    QHeaderView.ResizeMode.Fixed)
+        hdr.setSectionResizeMode(COL_RATIO,    QHeaderView.ResizeMode.Fixed)
+        hdr.setSectionResizeMode(COL_ETA,      QHeaderView.ResizeMode.Fixed)
+        hdr.setSectionResizeMode(COL_ADDED,    QHeaderView.ResizeMode.Fixed)
         hdr.setSectionResizeMode(COL_PROGRESS, QHeaderView.ResizeMode.Fixed)
         hdr.setSectionResizeMode(COL_DOWNLOAD, QHeaderView.ResizeMode.Fixed)
         hdr.setSectionResizeMode(COL_DELETE,   QHeaderView.ResizeMode.Fixed)
 
-        self._table.setColumnWidth(COL_TYPE,     90)
+        self._table.setColumnWidth(COL_TYPE,     110)
         self._table.setColumnWidth(COL_STATUS,   110)
         self._table.setColumnWidth(COL_SIZE,     80)
-        self._table.setColumnWidth(COL_PROGRESS, 130)
+        self._table.setColumnWidth(COL_SEEDS,    60)
+        self._table.setColumnWidth(COL_PEERS,    60)
+        self._table.setColumnWidth(COL_RATIO,    60)
+        self._table.setColumnWidth(COL_ETA,      70)
+        self._table.setColumnWidth(COL_ADDED,    110)
+        self._table.setColumnWidth(COL_PROGRESS, 160)
         self._table.setColumnWidth(COL_DOWNLOAD, 90)
-        self._table.setColumnWidth(COL_DELETE,   70)
+        self._table.setColumnWidth(COL_DELETE,   50)
 
-        self._table.verticalHeader().setDefaultSectionSize(32)
+        self._table.verticalHeader().setDefaultSectionSize(36)
+
+        # Right-click header for column visibility toggle
+        hdr.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        hdr.customContextMenuRequested.connect(self._on_header_context_menu)
+
+        # Apply saved column visibility from config
+        self._apply_column_visibility()
 
         return self._table
+
+    def _apply_column_visibility(self):
+        """Show/hide optional columns based on config."""
+        col_config = self.config.get("columns", {})
+        for col_idx, config_key in COL_VISIBILITY_KEYS.items():
+            visible = col_config.get(config_key,
+                      COL_VISIBILITY_DEFAULTS.get(config_key, True))
+            self._table.setColumnHidden(col_idx, not visible)
+
+    def _on_header_context_menu(self, pos):
+        """Right-click on column header — show checkable visibility menu."""
+        menu = QMenu(self)
+        menu.setStyleSheet(f"""
+            QMenu {{
+                background-color: {COLOR_PANEL};
+                color: {COLOR_TEXT};
+                border: 1px solid {COLOR_BORDER};
+            }}
+            QMenu::item {{
+                padding: 4px 20px 4px 28px;
+            }}
+            QMenu::item:selected {{
+                background-color: {COLOR_ACCENT};
+                color: #000000;
+            }}
+            QMenu::indicator {{
+                width: 14px;
+                height: 14px;
+                margin-left: 6px;
+            }}
+            QMenu::indicator:checked {{
+                background-color: {COLOR_ACCENT};
+                border: 1px solid {COLOR_ACCENT};
+                border-radius: 2px;
+            }}
+            QMenu::indicator:unchecked {{
+                background-color: {COLOR_PANEL};
+                border: 1px solid {COLOR_BORDER};
+                border-radius: 2px;
+            }}
+        """)
+
+        col_config = self.config.get("columns", {})
+        label_map  = {
+            COL_SEEDS: "Seeds",
+            COL_PEERS: "Peers",
+            COL_RATIO: "Ratio",
+            COL_ETA:   "ETA",
+            COL_ADDED: "Added",
+        }
+
+        actions = {}
+        for col_idx, label in label_map.items():
+            config_key = COL_VISIBILITY_KEYS[col_idx]
+            visible    = col_config.get(config_key,
+                         COL_VISIBILITY_DEFAULTS.get(config_key, True))
+            action = menu.addAction(label)
+            action.setCheckable(True)
+            action.setChecked(visible)
+            actions[action] = (col_idx, config_key)
+
+        chosen = menu.exec(self._table.horizontalHeader().mapToGlobal(pos))
+        if chosen and chosen in actions:
+            col_idx, config_key = actions[chosen]
+            new_visible = chosen.isChecked()
+            self._table.setColumnHidden(col_idx, not new_visible)
+            if "columns" not in self.config:
+                self.config["columns"] = dict(COL_VISIBILITY_DEFAULTS)
+            self.config["columns"][config_key] = new_visible
+            save_config(self.config)
+            self._log(f"Column '{chosen.text()}' {'shown' if new_visible else 'hidden'} — saved.")
 
     def _build_log_strip(self) -> QWidget:
         """Monospace timestamped log at the bottom of the right panel."""
@@ -518,21 +850,27 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        # Thin label header
-        header = QLabel("  LOG")
-        header.setFixedHeight(18)
-        header.setStyleSheet(
-            f"background-color: #1a1a1a; color: {COLOR_TEXT_MUTED}; "
-            f"font-size: 7pt; font-weight: bold; letter-spacing: 2px;"
-        )
+        # Log header — matches column header style for consistency
+        header = QLabel("   LOG")
+        header.setFixedHeight(26)
+        header.setStyleSheet(f"""
+            background-color: {COLOR_PANEL};
+            color: {COLOR_ACCENT};
+            font-size: 8pt;
+            font-weight: bold;
+            letter-spacing: 3px;
+            border-top: 1px solid {COLOR_BORDER_BRIGHT};
+            border-bottom: 1px solid {COLOR_BORDER_BRIGHT};
+            padding-top: 1px;
+        """)
         layout.addWidget(header)
 
         self._log_view = QTextEdit()
         self._log_view.setReadOnly(True)
         self._log_view.setFont(QFont(FONT_LOG_FAMILY, FONT_LOG_SIZE))
         self._log_view.setStyleSheet(
-            f"background-color: {COLOR_PANEL}; color: #aaaaaa; "
-            f"border: none; border-top: 1px solid {COLOR_BORDER};"
+            f"background-color: {COLOR_BG}; color: #888888; "
+            f"border: none;"
         )
         self._log_view.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         layout.addWidget(self._log_view)
@@ -540,32 +878,100 @@ class MainWindow(QMainWindow):
         return container
 
     def _build_status_bar(self):
-        """Status text left | Download All centre-right | donate far right."""
+        """Pro status bar — status indicator left, Download All accent button, donate right."""
         bar = QStatusBar()
         bar.setSizeGripEnabled(False)
+        bar.setFixedHeight(32)
+        bar.setStyleSheet(f"""
+            QStatusBar {{
+                background-color: {COLOR_PANEL};
+                border-top: 1px solid {COLOR_BORDER_BRIGHT};
+                padding: 0;
+            }}
+            QStatusBar::item {{
+                border: none;
+            }}
+        """)
         self.setStatusBar(bar)
 
-        self._status_label = QLabel("Ready")
-        bar.addWidget(self._status_label, stretch=1)
+        # Status dot + text
+        status_widget = QWidget()
+        status_widget.setStyleSheet("background: transparent;")
+        status_layout = QHBoxLayout(status_widget)
+        status_layout.setContentsMargins(4, 0, 0, 0)
+        status_layout.setSpacing(6)
 
-        dl_all_btn = QPushButton("Download All")
-        dl_all_btn.setFixedHeight(22)
+        self._status_dot = QLabel("●")
+        self._status_dot.setStyleSheet(
+            f"color: {COLOR_ACCENT}; font-size: 8pt; background: transparent;"
+        )
+        status_layout.addWidget(self._status_dot)
+
+        self._status_label = QLabel("Ready")
+        self._status_label.setStyleSheet(
+            f"color: {COLOR_TEXT_MUTED}; font-size: 8pt; background: transparent;"
+        )
+        status_layout.addWidget(self._status_label)
+        bar.addWidget(status_widget, stretch=1)
+
+        # Download All — outline only, fills on hover, matches row buttons
+        dl_all_btn = QPushButton("⬇  Download All")
+        dl_all_btn.setFixedHeight(24)
+        dl_all_btn.setFixedWidth(130)
+        dl_all_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: transparent;
+                color: {COLOR_TEXT_MUTED};
+                border: 1px solid {COLOR_BORDER};
+                border-radius: 3px;
+                font-size: 8pt;
+                padding: 0 10px;
+            }}
+            QPushButton:hover {{
+                background-color: {COLOR_ACCENT};
+                color: #000000;
+                border: 1px solid {COLOR_ACCENT};
+            }}
+            QPushButton:pressed {{
+                background-color: {COLOR_ACCENT};
+                color: #000000;
+            }}
+        """)
         dl_all_btn.clicked.connect(self._on_download_all)
         bar.addPermanentWidget(dl_all_btn)
 
-        spacer = QLabel("  ")
-        bar.addPermanentWidget(spacer)
-
-        kofi_btn = QPushButton("donate ♥ ko-fi")
-        kofi_btn.setFixedHeight(22)
-        kofi_btn.setFlat(True)
-        kofi_btn.setStyleSheet(
-            f"color: {COLOR_TEXT_MUTED}; font-size: 8pt; border: none; "
-            f"padding: 0 6px;"
+        # Divider
+        divider = QLabel(" | ")
+        divider.setStyleSheet(
+            f"color: {COLOR_BORDER_BRIGHT}; background: transparent; font-size: 9pt; padding: 0 2px;"
         )
+        bar.addPermanentWidget(divider)
+
+        # Ko-fi link
+        kofi_btn = QPushButton("♥  donate")
+        kofi_btn.setFixedHeight(24)
+        kofi_btn.setFixedWidth(70)
+        kofi_btn.setStyleSheet(f"""
+            QPushButton {{
+                color: {COLOR_ACCENT_DIM};
+                font-size: 8pt;
+                border: none;
+                background: transparent;
+                padding: 0 4px;
+            }}
+            QPushButton:hover {{
+                color: {COLOR_ACCENT};
+            }}
+        """)
         kofi_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         kofi_btn.clicked.connect(lambda: webbrowser.open(KOFI_URL))
         bar.addPermanentWidget(kofi_btn)
+
+        # Right spacer — aligns permanent widgets with content right edge
+        right_pad = QLabel("")
+        right_pad.setFixedWidth(8)
+        right_pad.setStyleSheet("background: transparent;")
+        bar.addPermanentWidget(right_pad)
 
     def _build_tray(self):
         """System tray icon with Open / About / Restart / Quit menu."""
@@ -683,7 +1089,8 @@ class MainWindow(QMainWindow):
         if result["success"]:
             self._log(f"{item_type.capitalize()} added successfully: {result['detail']}")
             self._set_status(f"{item_type.capitalize()} added — refreshing queue...")
-            QTimer.singleShot(1500, self._submit_poll)
+            QTimer.singleShot(4000, self._submit_poll)
+            QTimer.singleShot(10000, self._submit_poll)  # second check in case TorBox is slow
         else:
             self._log(f"Failed to add {item_type}: {result['detail']}", "ERROR")
             self._set_status(f"Error: {result['detail']}")
@@ -699,7 +1106,7 @@ class MainWindow(QMainWindow):
         """Remove completed rows from the table (local display only — not TorBox)."""
         keys_to_remove = [
             key for key, item in self._row_items.items()
-            if _torbox_state_to_status(item.get("download_state", "")) == STATUS_READY
+            if _torbox_state_to_status(item) == STATUS_READY
             and key not in self._downloading
         ]
         for key in keys_to_remove:
@@ -718,7 +1125,7 @@ class MainWindow(QMainWindow):
         """Trigger a download for every Ready row that isn't already downloading."""
         started = 0
         for key, item in self._row_items.items():
-            status = _torbox_state_to_status(item.get("download_state", ""))
+            status = _torbox_state_to_status(item)
             if status == STATUS_READY and key not in self._downloading:
                 self._start_download(key, item)
                 started += 1
@@ -764,6 +1171,7 @@ class MainWindow(QMainWindow):
 
     def _on_poll_finished(self, items: list):
         """Slot — runs on main thread — update the queue table from fresh data."""
+        self._log(f"[DEBUG] Poll returned {len(items)} item(s): {[_row_key(i) for i in items]}")
         self._update_queue_table(items)
         self._set_status(f"Ready — {len(items)} item(s) in queue")
 
@@ -788,6 +1196,12 @@ class MainWindow(QMainWindow):
         for item in items:
             key = _row_key(item)
             seen_keys.add(key)
+
+            # Skip items the user just deleted — give TorBox time to process.
+            # Keys are removed from this set after one poll cycle (below).
+            if key in self._deleted_keys:
+                continue
+
             self._row_items[key] = item
 
             if key in self._row_index:
@@ -795,34 +1209,40 @@ class MainWindow(QMainWindow):
             else:
                 self._add_queue_row(key, item)
 
+        # Clear the deleted-keys suppression set after each poll cycle.
+        # By the next poll TorBox will have finished processing the deletes.
+        self._log(f"[DEBUG] Table now has {self._table.rowCount()} row(s), index keys: {list(self._row_index.keys())}")
+        self._deleted_keys.clear()
+
     def _add_queue_row(self, key: str, item: dict):
         """Insert a new row into the queue table for the given item."""
         row = self._table.rowCount()
         self._table.insertRow(row)
         self._row_index[key] = row
 
-        # Name — store the full item dict here for later retrieval
+        # Name — bold font, store row key for retrieval
         name_cell = QTableWidgetItem(item.get("name", "Unknown"))
         name_cell.setData(Qt.ItemDataRole.UserRole, key)
+        bold_font = QFont(FONT_UI_FAMILY, FONT_UI_SIZE, QFont.Weight.Bold)
+        name_cell.setFont(bold_font)
         self._table.setItem(row, COL_NAME, name_cell)
 
-        # Type icon
+        # Type — colored badge widget
         source_type = item.get("source_type", "")
-        type_cell   = QTableWidgetItem(
-            f"  {TYPE_ICONS.get(source_type, '?')}  {source_type.capitalize()}"
-        )
-        type_cell.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._table.setItem(row, COL_TYPE, type_cell)
+        self._table.setCellWidget(row, COL_TYPE, _make_badge(source_type))
 
         # Size
         size_cell = QTableWidgetItem(_fmt_size(item.get("size", 0)))
         size_cell.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+        size_cell.setForeground(__import__('PyQt6.QtGui', fromlist=['QColor']).QColor(COLOR_TEXT_MUTED))
         self._table.setItem(row, COL_SIZE, size_cell)
 
-        # Status (cell — text only; progress bar handles the visual for progress)
-        status = _torbox_state_to_status(item.get("download_state", ""))
-        status_cell = QTableWidgetItem(status)
+        # Status — compound display text with color coding
+        status      = _torbox_state_to_status(item)
+        disp_status = _torbox_display_status(item)
+        status_cell = QTableWidgetItem(disp_status)
         status_cell.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._apply_status_color(status_cell, status)
         self._table.setItem(row, COL_STATUS, status_cell)
 
         # Progress bar
@@ -833,19 +1253,42 @@ class MainWindow(QMainWindow):
         self._style_progress_bar(pbar, status)
         self._table.setCellWidget(row, COL_PROGRESS, pbar)
 
-        # Download button
+        # Download button — outline only, fills on hover
         dl_btn = QPushButton("Download")
         dl_btn.setEnabled(status == STATUS_READY)
         dl_btn.setFixedHeight(26)
+        dl_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: transparent;
+                color: {COLOR_TEXT_MUTED};
+                border: 1px solid {COLOR_BORDER};
+                border-radius: 3px;
+                font-size: 8pt;
+                padding: 0 6px;
+            }}
+            QPushButton:hover {{
+                background-color: {COLOR_ACCENT};
+                color: #000000;
+                border: 1px solid {COLOR_ACCENT};
+            }}
+            QPushButton:disabled {{
+                color: #2e2e2e;
+                border: 1px solid #242424;
+                background-color: transparent;
+            }}
+        """)
         dl_btn.clicked.connect(lambda checked, k=key: self._on_download_clicked(k))
         self._table.setCellWidget(row, COL_DOWNLOAD, dl_btn)
 
         # Delete button
         del_btn = QPushButton("✕")
-        del_btn.setFixedHeight(26)
+        del_btn.setFixedHeight(28)
         del_btn.setToolTip("Remove from TorBox queue")
         del_btn.clicked.connect(lambda checked, k=key: self._on_delete_clicked(k))
         self._table.setCellWidget(row, COL_DELETE, del_btn)
+
+        # Optional columns
+        self._set_optional_cells(row, item)
 
     def _update_queue_row(self, key: str, item: dict):
         """Refresh cells on an existing row with new data from the API."""
@@ -853,12 +1296,14 @@ class MainWindow(QMainWindow):
         if row is None:
             return
 
-        status = _torbox_state_to_status(item.get("download_state", ""))
+        status      = _torbox_state_to_status(item)
+        disp_status = _torbox_display_status(item)
 
-        # Update status cell
+        # Update status cell with compound display text and color
         status_cell = self._table.item(row, COL_STATUS)
         if status_cell:
-            status_cell.setText(status)
+            status_cell.setText(disp_status)
+            self._apply_status_color(status_cell, status)
 
         # Update size cell (may arrive after initial add)
         size_cell = self._table.item(row, COL_SIZE)
@@ -877,6 +1322,28 @@ class MainWindow(QMainWindow):
         if isinstance(dl_btn, QPushButton):
             dl_btn.setEnabled(status == STATUS_READY and key not in self._downloading)
 
+        # Refresh optional columns
+        self._set_optional_cells(row, item)
+
+    def _set_optional_cells(self, row: int, item: dict):
+        """Populate Seeds, Peers, Ratio, ETA, Added cells for a given row."""
+        def _cell(text: str) -> QTableWidgetItem:
+            c = QTableWidgetItem(str(text))
+            c.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            c.setForeground(__import__('PyQt6.QtGui', fromlist=['QColor']).QColor(COLOR_TEXT_MUTED))
+            return c
+
+        seeds = item.get("seeds", 0) or 0
+        peers = item.get("peers", 0) or 0
+        ratio = item.get("ratio", 0) or 0
+        eta   = item.get("eta", 0)   or 0
+
+        self._table.setItem(row, COL_SEEDS, _cell(seeds))
+        self._table.setItem(row, COL_PEERS, _cell(peers))
+        self._table.setItem(row, COL_RATIO, _cell(f"{float(ratio):.2f}"))
+        self._table.setItem(row, COL_ETA,   _cell(_fmt_eta(eta)))
+        self._table.setItem(row, COL_ADDED, _cell(_fmt_added(item.get("created_at", ""))))
+
     def _remove_row(self, key: str):
         """Remove a row from the table and rebuild the row index."""
         row = self._row_index.pop(key, None)
@@ -889,6 +1356,15 @@ class MainWindow(QMainWindow):
             k: (r - 1 if r > row else r)
             for k, r in self._row_index.items()
         }
+
+    @staticmethod
+    def _apply_status_color(cell, status: str):
+        """Apply foreground color only to a status cell — no background tint."""
+        from PyQt6.QtGui import QColor, QBrush
+        colors = STATUS_COLORS.get(status, (None, None))
+        _, fg = colors   # background intentionally ignored — too busy
+        if fg:
+            cell.setForeground(QBrush(QColor(fg)))
 
     @staticmethod
     def _style_progress_bar(pbar: QProgressBar, status: str):
@@ -988,22 +1464,26 @@ class MainWindow(QMainWindow):
         pbar = self._table.cellWidget(row, COL_PROGRESS)
         if not isinstance(pbar, QProgressBar):
             return
-        if total_bytes > 0:
+
+        # Show percentage only — Content-Length from TorBox is unreliable
+        # (sometimes reflects chunk size rather than total file size).
+        # If total is known and trustworthy, show percentage.
+        # Otherwise pulse the bar so it's clear something is happening.
+        if total_bytes > 0 and bytes_recv <= total_bytes:
             pct = int(bytes_recv / total_bytes * 100)
             pbar.setRange(0, 100)
             pbar.setValue(pct)
-            pbar.setFormat(
-                f"{_fmt_size(bytes_recv)} / {_fmt_size(total_bytes)}"
-            )
+            pbar.setFormat(f"{pct}%")
         else:
-            # Unknown total — show bytes received, indeterminate bar
             pbar.setRange(0, 0)
-            pbar.setFormat(f"{_fmt_size(bytes_recv)}")
+            pbar.setFormat("")
 
     def _on_download_finished(self, key: str, file_path: str):
         self._downloading.discard(key)
-        fname = os.path.basename(file_path)
-        self._log(f"Download complete: {fname}  →  {file_path}")
+        from urllib.parse import unquote
+        fname = unquote(os.path.basename(file_path))
+        clean_path = unquote(file_path)
+        self._log(f"Download complete: {fname}  →  {clean_path}")
         self._set_status(f"Done: {fname}")
 
         row = self._row_index.get(key)
@@ -1095,6 +1575,7 @@ class MainWindow(QMainWindow):
 
         if result["success"]:
             self._log(f"Deleted from TorBox: {name}")
+            self._deleted_keys.add(key)
             self._remove_row(key)
         else:
             self._log(f"Delete failed for '{name}': {result['detail']}", "ERROR")
@@ -1113,21 +1594,37 @@ class MainWindow(QMainWindow):
 
     def _set_status(self, msg: str):
         self._status_label.setText(msg)
+        # Pulse dot — amber during activity, green when idle
+        if any(w in msg.lower() for w in ("error", "failed")):
+            self._status_dot.setStyleSheet(
+                "color: #e05050; font-size: 8pt; background: transparent;"
+            )
+        elif any(w in msg.lower() for w in ("downloading", "adding", "polling", "fetching")):
+            self._status_dot.setStyleSheet(
+                "color: #e0a030; font-size: 8pt; background: transparent;"
+            )
+        else:
+            self._status_dot.setStyleSheet(
+                f"color: {COLOR_ACCENT}; font-size: 8pt; background: transparent;"
+            )
 
     # -----------------------------------------------------------------------
     # Tray / window close
     # -----------------------------------------------------------------------
 
     def closeEvent(self, event):
-        """Minimize to tray instead of closing."""
-        event.ignore()
-        self.hide()
-        self._tray.showMessage(
-            APP_NAME,
-            "Running in the system tray.",
-            QSystemTrayIcon.MessageIcon.Information,
-            2000,
-        )
+        """Minimize to tray or quit depending on user setting."""
+        if self.config.get("minimize_to_tray", True):
+            event.ignore()
+            self.hide()
+            self._tray.showMessage(
+                APP_NAME,
+                "Running in the system tray.",
+                QSystemTrayIcon.MessageIcon.Information,
+                2000,
+            )
+        else:
+            self._tray_quit()
 
     def _on_tray_activated(self, reason):
         if reason == QSystemTrayIcon.ActivationReason.DoubleClick:

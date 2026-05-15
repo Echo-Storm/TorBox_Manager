@@ -137,11 +137,38 @@ On `success: false`, surface `detail` string directly in the log strip and statu
 
 ---
 
+## Confirmed TorBox API Field Names (verified 2026-05-15)
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | int | Unique per source type |
+| `name` | str | Display name |
+| `size` | int | Bytes |
+| `progress` | int | 0–100 |
+| `download_state` | str | Lowercase with spaces e.g. `"uploading (no peers)"` |
+| `cached` | bool | **Primary ready signal** — True = downloadable now |
+| `download_finished` | bool | TorBox-side download complete |
+| `magnet` | str or null | String URI for magnet adds, null for .torrent uploads |
+| `files` | list | Each file has `id` (int), `name`, `size`, `short_name` |
+| `seeds`, `peers`, `ratio` | int/float | Available — reserved for v0.2 columns |
+| `eta`, `download_speed`, `upload_speed` | int | Available — reserved for v0.2 |
+| `created_at`, `cached_at` | str | ISO8601 — reserved for v0.2 |
+
+**Critical:** All three list endpoints require `bypass_cache=true` as a query parameter.
+Without it, TorBox returns a stale server-side cache that may only contain the most
+recently added item. This was the root cause of items not appearing in the queue.
+
+**Status mapping:** `item["cached"] == True` is the authoritative ready signal.
+`download_state` reflects torrent activity only and stays as "uploading (no peers)"
+even when the file is fully cached and ready to download.
+
+---
+
 ## Workers
 
 **PollWorker** (QRunnable, repeating via QTimer)
 - Fires every 30 seconds (configurable in settings)
-- Calls all three list endpoints
+- Calls all three list endpoints with bypass_cache=true
 - Emits signal with unified list of queue items
 - UI slot receives the list and updates table rows in place
 
@@ -227,4 +254,4 @@ Stored in `config.json` alongside the script files. No registry, no AppData.
 
 ## Version
 
-v0.1.0 — initial build
+v0.1.0 — initial build, confirmed working 2026-05-15

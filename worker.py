@@ -173,10 +173,29 @@ class DownloadWorker(QRunnable):
         self.signals.status.emit(f"Requesting download link for: {item_name}")
 
         # Step 1 — resolve the download URL from TorBox
-        url_result = self._request_link(source_type, item_id)
+        # Retry up to 3 times with a short delay — TorBox occasionally returns
+        # transient "error processing your request" responses on link generation.
+        import time
+        url_result   = None
+        last_detail  = ""
+        max_attempts = 3
+
+        for attempt in range(1, max_attempts + 1):
+            url_result  = self._request_link(source_type, item_id)
+            last_detail = url_result.get("detail", "")
+            if url_result["success"]:
+                break
+            if attempt < max_attempts:
+                self.signals.status.emit(
+                    f"Link request failed (attempt {attempt}/{max_attempts}), "
+                    f"retrying in 3s... — {last_detail}"
+                )
+                time.sleep(3)
+
         if not url_result["success"]:
             self.signals.error.emit(
-                f"Could not get download link for '{item_name}': {url_result['detail']}"
+                f"Could not get download link for '{item_name}' "
+                f"after {max_attempts} attempts: {last_detail}"
             )
             return
 
@@ -314,6 +333,11 @@ class DownloadWorker(QRunnable):
 
         if not filename:
             filename = fallback
+
+        # URL-decode before sanitising — TorBox sometimes returns
+        # percent-encoded filenames (e.g. Atari%207800%20Box%20Art.rar)
+        from urllib.parse import unquote
+        filename = unquote(filename)
 
         # Sanitise: remove characters Windows won't allow in filenames
         filename = re.sub(r'[\\/:*?"<>|]', "_", filename)

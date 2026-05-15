@@ -1,0 +1,13 @@
+{
+    "api_key": "a6525d5a-3ce5-484e-985d-fc9b98fdf797",
+    "download_dir": "C:/Users/Echostorm/Downloads",
+    "poll_interval": 300,
+    "columns": {
+        "col_seeds": true,
+        "col_peers": true,
+        "col_ratio": true,
+        "col_eta": true,
+        "col_added": true
+    },
+    "minimize_to_tray": false
+}

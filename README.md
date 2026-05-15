@@ -47,22 +47,12 @@ All future launches are instant: just double-click `launch.bat` (or pin it to yo
 
 ---
 
-## First Run — Field Name Verification
+## Notes
 
-Before the queue table will display correctly, verify that TorBox's API field names match the assumptions in the code. This takes five minutes:
-
-1. Open a terminal in the project folder
-2. Activate the venv: `venv\Scripts\activate`
-3. Run a quick Python session:
-
-```python
-import api
-api.debug_raw_list("your_api_key_here")
-```
-
-4. Compare the printed field names against the assumptions listed in `worker.py` and `ui.py`  
-   Key fields to confirm: `download_state`, `progress`, `size`, `files`, `magnet`
-5. Fix any mismatches in `ui.py` → `_torbox_state_to_status()` and `_add_queue_row()`
+- **Queue population** — items appear one at a time as TorBox registers each add. This is normal. Adding a batch of torrents takes a few seconds per item to appear.
+- **"Found Cached Torrent"** — if TorBox already has a torrent cached, it reuses it. Your item will appear as Ready almost immediately.
+- **Download errors** — if a specific torrent shows "error processing your request" on every attempt, it may be a bad cache entry on TorBox's side. Delete it and try re-adding, or report it to TorBox support.
+- **Debug logging** — the log strip shows `[DEBUG]` lines during polling. This is intentional during v0.1 development and will be cleaned up for v1.0.
 
 ---
 
@@ -105,10 +95,12 @@ Settings are stored in `config.json` alongside the script files. No registry, no
 - Four add types, unified queue, in-app download, system tray, EchoStorm theme
 
 ### v0.2 (planned)
-- Additional queue columns: Seeders, Peers, Ratio, Added time, ETA
+- Additional queue columns: Seeders, Peers, Ratio, Added time, ETA (all confirmed in API)
 - Right-click header to show/hide optional columns
 - Multi-file torrent support (file picker dialog before download)
 - Add operations moved off the main thread (prevents brief UI freeze on slow connections)
+- Auto-retry on transient download link errors
+- Settings dialog polish
 
 ---
 

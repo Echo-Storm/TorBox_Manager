@@ -32,10 +32,10 @@ from PyQt6.QtWidgets import (
     QLineEdit,
     QPushButton,
     QSizePolicy,
-    QSpinBox,
     QTextBrowser,
     QVBoxLayout,
 )
+from PyQt6.QtGui import QIntValidator
 
 from constants import (
     APP_NAME,
@@ -73,7 +73,7 @@ _DIALOG_STYLE = f"""
         color: {COLOR_TEXT_MUTED};
         font-size: 8pt;
     }}
-    QLineEdit, QSpinBox {{
+    QLineEdit {{
         background-color: {COLOR_PANEL};
         color: {COLOR_TEXT};
         border: 1px solid {COLOR_BORDER};
@@ -81,7 +81,7 @@ _DIALOG_STYLE = f"""
         padding: 4px 6px;
         selection-background-color: {COLOR_ACCENT};
     }}
-    QLineEdit:focus, QSpinBox:focus {{
+    QLineEdit:focus {{
         border: 1px solid {COLOR_ACCENT};
     }}
     QPushButton {{
@@ -363,17 +363,33 @@ class SettingsDialog(QDialog):
             "Leave blank to be prompted on first download."
         ))
 
+        # ---- Minimize to Tray ----
+        layout.addWidget(_section_label("Behaviour"))
+
+        self._tray_cb = QCheckBox("Minimize to system tray on close")
+        self._tray_cb.setChecked(self._config.get("minimize_to_tray", True))
+        layout.addWidget(self._tray_cb)
+
+        layout.addWidget(_muted_label(
+            "When enabled, closing the window hides it to the tray instead of quitting. "
+            "Use Quit from the tray menu to fully exit."
+        ))
+
         # ---- Poll Interval ----
         layout.addWidget(_section_label("Queue Refresh Interval"))
 
         poll_row = QHBoxLayout()
-        self._poll_spin = QSpinBox()
-        self._poll_spin.setMinimum(MIN_POLL_INTERVAL_SEC)
-        self._poll_spin.setMaximum(MAX_POLL_INTERVAL_SEC)
-        self._poll_spin.setValue(self._config.get("poll_interval", 30))
-        self._poll_spin.setFixedWidth(80)
-        self._poll_spin.setSuffix(" sec")
-        poll_row.addWidget(self._poll_spin)
+        self._poll_input = QLineEdit()
+        self._poll_input.setValidator(
+            QIntValidator(MIN_POLL_INTERVAL_SEC, MAX_POLL_INTERVAL_SEC)
+        )
+        self._poll_input.setText(str(self._config.get("poll_interval", 30)))
+        self._poll_input.setFixedWidth(80)
+        self._poll_input.setPlaceholderText("30")
+        poll_row.addWidget(self._poll_input)
+        sec_label = QLabel("sec")
+        sec_label.setStyleSheet(f"color: {COLOR_TEXT_MUTED}; padding-left: 4px;")
+        poll_row.addWidget(sec_label)
         poll_row.addStretch()
         layout.addLayout(poll_row)
 
@@ -419,12 +435,19 @@ class SettingsDialog(QDialog):
         """
         Return the updated config dict. Call only after exec() == Accepted.
         Returns a full dict — callers can pass it straight to save_config().
+        Preserves any keys not managed by this dialog (e.g. columns visibility).
         """
-        return {
-            "api_key":       self._key_input.text().strip(),
-            "download_dir":  self._dir_input.text().strip(),
-            "poll_interval": self._poll_spin.value(),
-        }
+        updated = dict(self._config)
+        updated["api_key"]          = self._key_input.text().strip()
+        updated["download_dir"]     = self._dir_input.text().strip()
+        try:
+            poll_val = int(self._poll_input.text())
+            poll_val = max(MIN_POLL_INTERVAL_SEC, min(MAX_POLL_INTERVAL_SEC, poll_val))
+        except ValueError:
+            poll_val = 30
+        updated["poll_interval"] = poll_val
+        updated["minimize_to_tray"] = self._tray_cb.isChecked()
+        return updated
 
 
 # ---------------------------------------------------------------------------

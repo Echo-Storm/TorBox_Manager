@@ -203,18 +203,25 @@ def add_nzb_file(api_key: str, file_path: str) -> dict:
 # ---------------------------------------------------------------------------
 
 def list_torrents(api_key: str) -> dict:
-    """Fetch all torrent/magnet queue items for this account."""
-    return _request("GET", ENDPOINT_LIST_TORRENTS, api_key)
+    """Fetch all torrent/magnet queue items for this account.
+
+    bypass_cache=true is required — without it TorBox returns a server-side
+    cached snapshot that may be stale and only contain the most recent item.
+    """
+    return _request("GET", ENDPOINT_LIST_TORRENTS, api_key,
+                    params={"bypass_cache": "true"})
 
 
 def list_webdl(api_key: str) -> dict:
     """Fetch all web/hoster download queue items for this account."""
-    return _request("GET", ENDPOINT_LIST_WEBDL, api_key)
+    return _request("GET", ENDPOINT_LIST_WEBDL, api_key,
+                    params={"bypass_cache": "true"})
 
 
 def list_usenet(api_key: str) -> dict:
     """Fetch all usenet/NZB queue items for this account."""
-    return _request("GET", ENDPOINT_LIST_USENET, api_key)
+    return _request("GET", ENDPOINT_LIST_USENET, api_key,
+                    params={"bypass_cache": "true"})
 
 
 def list_all(api_key: str) -> dict:
@@ -235,6 +242,8 @@ def list_all(api_key: str) -> dict:
     torrents = list_torrents(api_key)
     if torrents["success"] and isinstance(torrents["data"], list):
         for item in torrents["data"]:
+            # magnet field is a string (the magnet URI) for magnet adds,
+            # or null for .torrent file uploads. Confirmed from live API 2026-05-15.
             item["source_type"] = "magnet" if item.get("magnet") else "torrent"
             results.append(item)
     elif not torrents["success"]:
@@ -317,7 +326,7 @@ def delete_torrent(api_key: str, torrent_id: int) -> dict:
         "POST",
         ENDPOINT_DEL_TORRENT,
         api_key,
-        data={"torrent_id": torrent_id, "operation": "delete"},
+        json={"torrent_id": torrent_id, "operation": "delete"},
     )
 
 
@@ -327,7 +336,7 @@ def delete_webdl(api_key: str, webdl_id: int) -> dict:
         "POST",
         ENDPOINT_DEL_WEBDL,
         api_key,
-        data={"webdl_id": webdl_id, "operation": "delete"},
+        json={"webdl_id": webdl_id, "operation": "delete"},
     )
 
 
@@ -337,7 +346,7 @@ def delete_usenet(api_key: str, usenet_id: int) -> dict:
         "POST",
         ENDPOINT_DEL_USENET,
         api_key,
-        data={"usenet_id": usenet_id, "operation": "delete"},
+        json={"usenet_id": usenet_id, "operation": "delete"},
     )
 
 # ---------------------------------------------------------------------------

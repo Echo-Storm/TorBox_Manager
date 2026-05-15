@@ -13,6 +13,7 @@ import os
 
 from constants import (
     CONFIG_FILENAME,
+    COL_VISIBILITY_DEFAULTS,
     DEFAULT_POLL_INTERVAL_SEC,
 )
 
@@ -23,9 +24,11 @@ from constants import (
 # ---------------------------------------------------------------------------
 
 DEFAULTS = {
-    "api_key":       "",    # TorBox bearer token — required before any API call
-    "download_dir":  "",    # absolute path; empty means user hasn't configured it yet
-    "poll_interval": DEFAULT_POLL_INTERVAL_SEC,
+    "api_key":          "",    # TorBox bearer token — required before any API call
+    "download_dir":     "",    # absolute path; empty means user hasn't configured it yet
+    "poll_interval":    DEFAULT_POLL_INTERVAL_SEC,
+    "columns":          dict(COL_VISIBILITY_DEFAULTS),  # optional column visibility
+    "minimize_to_tray": True,  # hide to tray on close vs quit
 }
 
 # ---------------------------------------------------------------------------
