@@ -2,6 +2,32 @@
 
 ---
 
+## v0.4.0 — 2026-05-15
+
+### Features
+- Multi-file torrent picker — torrents with more than one file now open a dialog
+  before downloading. Shows all files with name and size, checkbox per file,
+  Select All / Deselect All, and OK disabled until at least one file is checked.
+  One DownloadWorker is dispatched per selected file. Single-file torrents and
+  all webdl/usenet items skip the dialog entirely.
+- Tray notification on download complete — opt-in toggle in Settings, off by default.
+  Shows the filename in a brief tray popup when a file finishes downloading.
+- Referral link in About dialog — unobtrusive "Get TorBox" button below the Ko-fi
+  button. Opens the TorBox referral page in the browser.
+
+### Fixes & Cleanup
+- worker.py: DownloadWorker now takes an explicit file_id parameter instead of
+  silently grabbing files[0]. The caller decides which file to download.
+- worker.py: moved inline imports (time, urllib.parse.unquote) to top-level.
+- worker.py: removed duplicate DeleteWorkerSignals class definition.
+- ui.py: _open_in_explorer now uses list form for subprocess.Popen to handle
+  paths with spaces correctly. Falls back to os.startfile on failure.
+- api.py: added User-Agent header (TorBoxManager/x.x.x) to all API requests.
+- config.py: added tray_notifications default (False).
+- constants.py: added REFERRAL_URL constant.
+
+---
+
 ## v0.3.0 — 2026-05-15
 
 ### Features

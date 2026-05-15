@@ -7,8 +7,9 @@
 # Dialogs defined here:
 #   AddMagnetDialog   — text input for a magnet:// link
 #   AddLinkDialog     — text input for a hoster URL
-#   SettingsDialog    — API key, download directory, poll interval
-#   AboutDialog       — version, description, Ko-fi link
+#   SettingsDialog    — API key, download directory, poll interval, toggles
+#   AboutDialog       — version, description, Ko-fi + TorBox referral links
+#   FilePickerDialog  — multi-file selector for torrents with more than one file
 #
 # File picker dialogs for .torrent and .nzb are single QFileDialog calls
 # and live inline in ui.py — no class needed for those.
@@ -20,7 +21,7 @@ import os
 import webbrowser
 
 from PyQt6.QtCore    import Qt
-from PyQt6.QtGui     import QFont
+from PyQt6.QtGui     import QColor, QFont, QIntValidator
 from PyQt6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -29,14 +30,16 @@ from PyQt6.QtWidgets import (
     QFileDialog,
     QFormLayout,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
     QLineEdit,
     QPushButton,
     QSizePolicy,
+    QTableWidget,
+    QTableWidgetItem,
     QTextBrowser,
     QVBoxLayout,
 )
-from PyQt6.QtGui import QIntValidator
 
 from constants import (
     APP_NAME,
@@ -46,9 +49,11 @@ from constants import (
     COLOR_ACCENT_DIM,
     COLOR_BG,
     COLOR_BORDER,
+    COLOR_BORDER_BRIGHT,
     COLOR_BUTTON_BG,
     COLOR_BUTTON_HOVER,
     COLOR_PANEL,
+    COLOR_PANEL_ALT,
     COLOR_TEXT,
     COLOR_TEXT_MUTED,
     FONT_UI_FAMILY,
@@ -56,6 +61,7 @@ from constants import (
     KOFI_URL,
     MAX_POLL_INTERVAL_SEC,
     MIN_POLL_INTERVAL_SEC,
+    REFERRAL_URL,
 )
 
 
@@ -135,6 +141,29 @@ _DIALOG_STYLE = f"""
         border: 1px solid {COLOR_BORDER};
         border-radius: 3px;
     }}
+    QTableWidget {{
+        background-color: {COLOR_PANEL};
+        color: {COLOR_TEXT};
+        border: 1px solid {COLOR_BORDER};
+        border-radius: 3px;
+        gridline-color: {COLOR_BORDER};
+        selection-background-color: {COLOR_ACCENT_DIM};
+        selection-color: {COLOR_TEXT};
+    }}
+    QTableWidget::item {{
+        padding: 4px 6px;
+    }}
+    QTableWidget::item:alternate {{
+        background-color: {COLOR_PANEL_ALT};
+    }}
+    QHeaderView::section {{
+        background-color: {COLOR_BG};
+        color: {COLOR_TEXT_MUTED};
+        border: none;
+        border-bottom: 1px solid {COLOR_BORDER_BRIGHT};
+        padding: 4px 6px;
+        font-size: 8pt;
+    }}
 """
 
 
@@ -148,9 +177,8 @@ def _make_paste_btn(target_input: QLineEdit) -> QPushButton:
     """
     Return a small Paste button that writes clipboard text into target_input.
 
-    Styled to sit flush against the input field without drawing attention —
-    muted border at rest, accent on hover, same height as the input.
-    The button is disabled when the clipboard contains no text.
+    Styled to sit flush against the input field without drawing attention.
+    Disabled when the clipboard contains no text.
     """
     btn = QPushButton("📋 Paste")
     btn.setFixedHeight(30)
@@ -191,9 +219,7 @@ def _make_paste_btn(target_input: QLineEdit) -> QPushButton:
         btn.setEnabled(bool(QApplication.clipboard().text().strip()))
 
     btn.clicked.connect(_do_paste)
-    # Re-check enabled state every time the clipboard changes
     QApplication.clipboard().dataChanged.connect(_update_state)
-    # Set initial state
     _update_state()
 
     return btn
@@ -212,6 +238,21 @@ def _muted_label(text: str) -> QLabel:
     label.setObjectName("muted")
     label.setWordWrap(True)
     return label
+
+
+def _format_size(size_bytes) -> str:
+    """Format a byte count as a human-readable string."""
+    try:
+        b = int(size_bytes)
+    except (TypeError, ValueError):
+        return ""
+    if b <= 0:
+        return ""
+    for unit in ("B", "KB", "MB", "GB", "TB"):
+        if b < 1024:
+            return f"{b:.1f} {unit}" if unit != "B" else f"{b} B"
+        b /= 1024
+    return f"{b:.1f} PB"
 
 
 # ---------------------------------------------------------------------------
@@ -257,7 +298,7 @@ class AddMagnetDialog(QDialog):
         ))
 
         self._error_label = QLabel("")
-        self._error_label.setStyleSheet(f"color: #e05050; font-size: 8pt;")
+        self._error_label.setStyleSheet("color: #e05050; font-size: 8pt;")
         layout.addWidget(self._error_label)
 
         buttons = QDialogButtonBox(
@@ -361,7 +402,7 @@ class AddLinkDialog(QDialog):
 
 class SettingsDialog(QDialog):
     """
-    Settings dialog: API key, download directory, poll interval.
+    Settings dialog: API key, download directory, poll interval, toggles.
 
     Reads the current config dict on open; returns an updated dict on accept.
     Does not call save_config() itself — the caller (ui.py) saves after accept.
@@ -379,7 +420,7 @@ class SettingsDialog(QDialog):
         self.setMinimumWidth(480)
         self.setModal(True)
         _apply_dialog_style(self)
-        self._config = dict(config)   # work on a copy
+        self._config = dict(config)
         self._build_ui()
 
     def _build_ui(self):
@@ -404,7 +445,7 @@ class SettingsDialog(QDialog):
         layout.addLayout(key_row)
 
         layout.addWidget(_muted_label(
-            "Found at torbox.app → Account → API. Stored locally in config.json."
+            "Found at torbox.app -> Account -> API. Stored locally in config.json."
         ))
 
         # ---- Download Directory ----
@@ -428,16 +469,20 @@ class SettingsDialog(QDialog):
             "Leave blank to be prompted on first download."
         ))
 
-        # ---- Minimize to Tray ----
+        # ---- Behaviour toggles ----
         layout.addWidget(_section_label("Behaviour"))
 
         self._tray_cb = QCheckBox("Minimize to system tray on close")
         self._tray_cb.setChecked(self._config.get("minimize_to_tray", True))
         layout.addWidget(self._tray_cb)
 
+        self._notify_cb = QCheckBox("Show tray notification when a download finishes")
+        self._notify_cb.setChecked(self._config.get("tray_notifications", False))
+        layout.addWidget(self._notify_cb)
+
         layout.addWidget(_muted_label(
-            "When enabled, closing the window hides it to the tray instead of quitting. "
-            "Use Quit from the tray menu to fully exit."
+            "Tray notifications pop up a brief message when a file finishes downloading. "
+            "Off by default."
         ))
 
         # ---- Poll Interval ----
@@ -460,7 +505,7 @@ class SettingsDialog(QDialog):
 
         layout.addWidget(_muted_label(
             f"How often to check TorBox for status updates. "
-            f"({MIN_POLL_INTERVAL_SEC}–{MAX_POLL_INTERVAL_SEC} seconds)"
+            f"({MIN_POLL_INTERVAL_SEC}-{MAX_POLL_INTERVAL_SEC} seconds)"
         ))
 
         # ---- Error label ----
@@ -499,19 +544,19 @@ class SettingsDialog(QDialog):
     def get_config(self) -> dict:
         """
         Return the updated config dict. Call only after exec() == Accepted.
-        Returns a full dict — callers can pass it straight to save_config().
-        Preserves any keys not managed by this dialog (e.g. columns visibility).
+        Preserves any keys not managed by this dialog (e.g. column visibility).
         """
         updated = dict(self._config)
-        updated["api_key"]          = self._key_input.text().strip()
-        updated["download_dir"]     = self._dir_input.text().strip()
+        updated["api_key"]            = self._key_input.text().strip()
+        updated["download_dir"]       = self._dir_input.text().strip()
+        updated["minimize_to_tray"]   = self._tray_cb.isChecked()
+        updated["tray_notifications"] = self._notify_cb.isChecked()
         try:
             poll_val = int(self._poll_input.text())
             poll_val = max(MIN_POLL_INTERVAL_SEC, min(MAX_POLL_INTERVAL_SEC, poll_val))
         except ValueError:
             poll_val = 30
         updated["poll_interval"] = poll_val
-        updated["minimize_to_tray"] = self._tray_cb.isChecked()
         return updated
 
 
@@ -521,14 +566,14 @@ class SettingsDialog(QDialog):
 
 class AboutDialog(QDialog):
     """
-    About dialog: app name, version, brief description, Ko-fi link.
+    About dialog: app name, version, brief description, Ko-fi and TorBox links.
     """
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle(f"About {APP_NAME}")
         self.setMinimumWidth(400)
-        self.setFixedHeight(260)
+        self.setFixedHeight(300)
         self.setModal(True)
         _apply_dialog_style(self)
         self._build_ui()
@@ -578,7 +623,189 @@ class AboutDialog(QDialog):
         kofi_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         layout.addWidget(kofi_btn)
 
+        # TorBox referral link — unobtrusive, muted style
+        referral_btn = QPushButton("Get TorBox  (referral link)")
+        referral_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        referral_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: transparent;
+                color: {COLOR_TEXT_MUTED};
+                border: 1px solid {COLOR_BORDER};
+                border-radius: 3px;
+                padding: 5px 14px;
+                font-size: 8pt;
+            }}
+            QPushButton:hover {{
+                color: {COLOR_TEXT};
+                border-color: {COLOR_BORDER_BRIGHT};
+            }}
+        """)
+        referral_btn.clicked.connect(lambda: webbrowser.open(REFERRAL_URL))
+        referral_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        layout.addWidget(referral_btn)
+
         # Close button
         close_btn = QPushButton("Close")
         close_btn.clicked.connect(self.accept)
         layout.addWidget(close_btn)
+
+
+# ---------------------------------------------------------------------------
+# FilePickerDialog
+# ---------------------------------------------------------------------------
+
+class FilePickerDialog(QDialog):
+    """
+    Multi-file selector for torrents that contain more than one file.
+
+    Shows a table of all files in the torrent with name, size, and a checkbox
+    per row. The user can check individual files, use Select All / Deselect All,
+    or drag to select rows (checkboxes follow the selection on spacebar/click).
+
+    OK is disabled until at least one file is checked.
+
+    Usage:
+        files = item.get("files", [])   # list of dicts with "id", "name", "size"
+        dlg = FilePickerDialog(item_name, files, parent)
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            selected = dlg.selected_files()
+            # returns list of {"id": int, "name": str} for each checked file
+
+    Assumptions about the files list structure (from TorBox API):
+        files[n]["id"]   — integer file ID used in the download link request
+        files[n]["name"] — filename string (may include subfolder path)
+        files[n]["size"] — size in bytes (int); may be absent or 0
+    """
+
+    def __init__(self, item_name: str, files: list, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle(f"Select Files — {item_name}")
+        self.setMinimumWidth(600)
+        self.setMinimumHeight(400)
+        self.setModal(True)
+        _apply_dialog_style(self)
+        self._files = files
+        self._build_ui()
+
+    def _build_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setSpacing(10)
+        layout.setContentsMargins(16, 16, 16, 16)
+
+        layout.addWidget(_section_label("Select files to download"))
+        layout.addWidget(_muted_label(
+            "Check the files you want. One download worker will be started per file."
+        ))
+
+        # ---- Table ----
+        self._table = QTableWidget(len(self._files), 3, self)
+        self._table.setHorizontalHeaderLabels(["", "File", "Size"])
+        self._table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
+        self._table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        self._table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
+        self._table.setColumnWidth(0, 28)
+        self._table.setColumnWidth(2, 90)
+        self._table.verticalHeader().setVisible(False)
+        self._table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self._table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self._table.setAlternatingRowColors(True)
+        self._table.setShowGrid(False)
+
+        for row, f in enumerate(self._files):
+            # Checkbox column
+            cb = QCheckBox()
+            cb.setChecked(True)
+            cb.stateChanged.connect(self._update_ok_button)
+            cb_widget = QLabel()   # wrapper so we can center the checkbox
+            cb_layout = QHBoxLayout(cb_widget)
+            cb_layout.setContentsMargins(4, 0, 0, 0)
+            cb_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            cb_layout.addWidget(cb)
+            self._table.setCellWidget(row, 0, cb_widget)
+
+            # Filename column — strip leading path if present
+            raw_name = f.get("name", f"file_{row}")
+            display_name = raw_name.split("/")[-1] if "/" in raw_name else raw_name
+            name_item = QTableWidgetItem(display_name)
+            name_item.setToolTip(raw_name)   # show full path on hover
+            self._table.setItem(row, 1, name_item)
+
+            # Size column
+            size_str = _format_size(f.get("size", 0))
+            size_item = QTableWidgetItem(size_str)
+            size_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            size_item.setForeground(QColor(COLOR_TEXT_MUTED))
+            self._table.setItem(row, 2, size_item)
+
+        layout.addWidget(self._table)
+
+        # ---- Select All / Deselect All row ----
+        btn_row = QHBoxLayout()
+        select_all_btn = QPushButton("Select All")
+        select_all_btn.setFixedWidth(100)
+        select_all_btn.clicked.connect(self._select_all)
+        deselect_all_btn = QPushButton("Deselect All")
+        deselect_all_btn.setFixedWidth(100)
+        deselect_all_btn.clicked.connect(self._deselect_all)
+        btn_row.addWidget(select_all_btn)
+        btn_row.addWidget(deselect_all_btn)
+        btn_row.addStretch()
+
+        self._count_label = QLabel("")
+        self._count_label.setStyleSheet(f"color: {COLOR_TEXT_MUTED}; font-size: 8pt;")
+        btn_row.addWidget(self._count_label)
+        layout.addLayout(btn_row)
+
+        # ---- OK / Cancel ----
+        self._button_box = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        self._button_box.accepted.connect(self.accept)
+        self._button_box.rejected.connect(self.reject)
+        layout.addWidget(self._button_box)
+
+        self._update_ok_button()
+
+    def _checkboxes(self):
+        """Yield each QCheckBox in the table in row order."""
+        for row in range(self._table.rowCount()):
+            wrapper = self._table.cellWidget(row, 0)
+            if wrapper:
+                for child in wrapper.children():
+                    if isinstance(child, QCheckBox):
+                        yield child
+
+    def _select_all(self):
+        for cb in self._checkboxes():
+            cb.setChecked(True)
+
+    def _deselect_all(self):
+        for cb in self._checkboxes():
+            cb.setChecked(False)
+
+    def _update_ok_button(self):
+        checked = sum(1 for cb in self._checkboxes() if cb.isChecked())
+        total   = self._table.rowCount()
+        ok_btn  = self._button_box.button(QDialogButtonBox.StandardButton.Ok)
+        if ok_btn:
+            ok_btn.setEnabled(checked > 0)
+        self._count_label.setText(f"{checked} of {total} selected")
+
+    def selected_files(self) -> list:
+        """
+        Return a list of dicts for each checked file.
+        Each dict has "id" (int) and "name" (str, the raw name from the API).
+        Call only after exec() == Accepted.
+        """
+        result = []
+        for row, f in enumerate(self._files):
+            wrapper = self._table.cellWidget(row, 0)
+            if not wrapper:
+                continue
+            for child in wrapper.children():
+                if isinstance(child, QCheckBox) and child.isChecked():
+                    result.append({
+                        "id":   f.get("id", 0),
+                        "name": f.get("name", f"file_{row}"),
+                    })
+        return result

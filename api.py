@@ -22,6 +22,7 @@ import os
 import requests
 
 from constants import (
+    APP_VERSION,
     API_BASE_URL,
     ENDPOINT_ADD_TORRENT,
     ENDPOINT_ADD_WEBDL,
@@ -48,7 +49,10 @@ _REQUEST_TIMEOUT = 20
 
 def _headers(api_key: str) -> dict:
     """Build the auth header required by every TorBox endpoint."""
-    return {"Authorization": f"Bearer {api_key}"}
+    return {
+        "Authorization": f"Bearer {api_key}",
+        "User-Agent":    f"TorBoxManager/{APP_VERSION}",
+    }
 
 
 def _url(endpoint: str) -> str:

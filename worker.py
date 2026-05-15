@@ -23,12 +23,15 @@
 #     emit finished/error, done. Keeps the main thread free during API calls.
 #
 # Assumption about TorBox API field names (verify against live responses):
-#   id, name, size, progress (0–100 int), download_state, magnet,
-#   files (list, each with id and name — we use files[0] for single-file items)
-#   These are noted where used so they're easy to find and fix if off.
+#   id, name, size, progress (0-100 int), download_state, magnet,
+#   files (list, each with id and name)
+#   These are noted where used so they are easy to find and fix if off.
 
 import os
 import re
+import time
+from urllib.parse import unquote
+
 import requests
 
 from PyQt6.QtCore import QObject, QRunnable, pyqtSignal
@@ -47,52 +50,28 @@ from constants import DOWNLOAD_CHUNK_SIZE
 
 class PollSignals(QObject):
     """Signals emitted by PollWorker."""
-
-    # Emitted on success — carries the unified list of queue items
-    finished = pyqtSignal(list)
-
-    # Emitted on failure — carries a human-readable error string
-    error    = pyqtSignal(str)
-
-    # Emitted regardless of outcome — carries a log-ready status string
-    status   = pyqtSignal(str)
+    finished = pyqtSignal(list)   # unified list of queue items
+    error    = pyqtSignal(str)    # human-readable error string
+    status   = pyqtSignal(str)    # log-ready status string
 
 
 class DownloadSignals(QObject):
     """Signals emitted by DownloadWorker."""
-
-    # Progress update: (bytes_received, total_bytes)
-    # total_bytes may be 0 if the server doesn't send Content-Length
-    progress = pyqtSignal(int, int)
-
-    # Emitted on successful completion — carries the full local file path
-    finished = pyqtSignal(str)
-
-    # Emitted on any failure — carries a human-readable error string
-    error    = pyqtSignal(str)
-
-    # Log-ready status string, emitted at key points
-    status   = pyqtSignal(str)
+    progress = pyqtSignal(int, int)  # (bytes_received, total_bytes)
+    finished = pyqtSignal(str)       # full local file path
+    error    = pyqtSignal(str)       # human-readable error string
+    status   = pyqtSignal(str)       # log-ready status string
 
 
 class AddSignals(QObject):
     """Signals emitted by AddWorker."""
-
-    # Emitted on success or failure — carries (success: bool, detail: str)
-    finished = pyqtSignal(bool, str)
-
-    # Log-ready status string
+    finished = pyqtSignal(bool, str)  # (success, detail)
     status   = pyqtSignal(str)
 
 
-class DeleteSignals(QObject):
+class DeleteWorkerSignals(QObject):
     """Signals emitted by DeleteWorker."""
-
-    # Emitted on success or failure — carries (success: bool, detail: str, row_key: str)
-    # row_key is passed through so the UI slot knows which row to remove.
-    finished = pyqtSignal(bool, str, str)
-
-    # Log-ready status string
+    finished = pyqtSignal(bool, str, str)  # (success, detail, row_key)
     status   = pyqtSignal(str)
 
 
@@ -105,7 +84,7 @@ class PollWorker(QRunnable):
     Fetches all three TorBox queues in a single background run.
 
     Lifecycle:
-        1. ui.py's QTimer fires → submits PollWorker to QThreadPool
+        1. ui.py's QTimer fires -> submits PollWorker to QThreadPool
         2. run() calls api.list_all()
         3. Emits signals.finished(items) or signals.error(msg)
         4. Worker is done — QThreadPool recycles the thread
@@ -121,11 +100,8 @@ class PollWorker(QRunnable):
 
     def run(self):
         self.signals.status.emit("Polling TorBox queue...")
-
         result = api.list_all(self.api_key)
-
         self.signals.status.emit(result["detail"])
-
         if result["success"]:
             items = result["data"] if isinstance(result["data"], list) else []
             self.signals.finished.emit(items)
@@ -140,10 +116,6 @@ class PollWorker(QRunnable):
 class AddWorker(QRunnable):
     """
     Submits a single add operation to TorBox on a background thread.
-
-    This keeps the main thread free during the API call — without this,
-    a slow connection could freeze the UI for up to 20 seconds (the request
-    timeout).
 
     add_fn: a callable that takes no arguments and returns an api result dict.
             Construct it as a lambda in the caller:
@@ -170,25 +142,11 @@ class AddWorker(QRunnable):
 # DeleteWorker
 # ---------------------------------------------------------------------------
 
-# ---------------------------------------------------------------------------
-# DeleteWorker
-# ---------------------------------------------------------------------------
-
-class DeleteWorkerSignals(QObject):
-    """Signals emitted by DeleteWorker."""
-    # (success, detail, row_key)
-    finished = pyqtSignal(bool, str, str)
-    status   = pyqtSignal(str)
-
-
 class DeleteWorker(QRunnable):
     """
     Deletes a single item from the TorBox queue on a background thread.
 
-    Same rationale as AddWorker — delete API calls can block the main thread
-    for several seconds on a slow connection.
-
-    delete_fn: callable → api result dict, constructed as a lambda in the caller.
+    delete_fn: callable -> api result dict, constructed as a lambda in the caller.
     row_key:   the item's row key, passed through to the finished signal so
                the UI slot knows which row to remove.
     item_name: human-readable name for log messages.
@@ -230,23 +188,26 @@ class DownloadWorker(QRunnable):
         api_key     : TorBox bearer token
         item        : dict — one item from the unified queue list (from PollWorker)
         download_dir: absolute path to the user's download directory
-
-    item must contain:
-        item["id"]          — TorBox item ID (int)
-        item["source_type"] — "torrent" | "magnet" | "webdl" | "usenet"
-        item["name"]        — display name / fallback filename
-        item["files"]       — list of file dicts (torrents only; each has "id", "name")
-                              For webdl and usenet this key may be absent.
+        file_id     : specific file ID to download (torrents/magnets only).
+                      The caller resolves this — files[0]["id"] for single-file
+                      items, or the ID chosen in FilePickerDialog for multi-file.
+                      Pass None for webdl and usenet (no file_id needed).
+        file_name   : optional display name for this specific file within a
+                      multi-file torrent. Used in log messages and as the
+                      fallback filename if Content-Disposition is absent.
 
     NOTE: "torrent" and "magnet" both use the torrent download endpoint.
     The source_type distinction is only for display; the API path is the same.
     """
 
-    def __init__(self, api_key: str, item: dict, download_dir: str):
+    def __init__(self, api_key: str, item: dict, download_dir: str,
+                 file_id: int = None, file_name: str = None):
         super().__init__()
         self.api_key      = api_key
         self.item         = item
         self.download_dir = download_dir
+        self.file_id      = file_id    # explicit file to download; None for webdl/usenet
+        self.file_name    = file_name  # optional per-file name for multi-file torrents
         self.signals      = DownloadSignals()
 
     # ------------------------------------------------------------------
@@ -254,7 +215,9 @@ class DownloadWorker(QRunnable):
     # ------------------------------------------------------------------
 
     def run(self):
-        item_name   = self.item.get("name", "unknown")
+        # Use the specific file name if provided (multi-file picker gave us one),
+        # otherwise fall back to the item's top-level name.
+        item_name   = self.file_name or self.item.get("name", "unknown")
         source_type = self.item.get("source_type", "")
         item_id     = self.item.get("id")
 
@@ -264,17 +227,16 @@ class DownloadWorker(QRunnable):
 
         if not self.download_dir or not os.path.isdir(self.download_dir):
             self.signals.error.emit(
-                f"Download directory is not set or does not exist. "
-                f"Set it in Settings before downloading."
+                "Download directory is not set or does not exist. "
+                "Set it in Settings before downloading."
             )
             return
 
         self.signals.status.emit(f"Requesting download link for: {item_name}")
 
-        # Step 1 — resolve the download URL from TorBox
+        # Resolve the download URL from TorBox.
         # Retry up to 3 times with a short delay — TorBox occasionally returns
         # transient "error processing your request" responses on link generation.
-        import time
         url_result   = None
         last_detail  = ""
         max_attempts = 3
@@ -305,7 +267,6 @@ class DownloadWorker(QRunnable):
             )
             return
 
-        # Step 2 — stream the file to disk
         self._stream_to_disk(download_url, item_name)
 
     # ------------------------------------------------------------------
@@ -316,15 +277,14 @@ class DownloadWorker(QRunnable):
         """
         Call the correct api.request_download_link_*() based on source_type.
 
-        Torrents and magnets share the same endpoint. We use files[0].id
-        as the file_id for the common case of a single-file torrent.
-        Multi-file torrents: we still use files[0] for now; a file picker
-        dialog is planned for a future version.
+        For torrents and magnets, self.file_id must be set by the caller.
+        The old behaviour of silently grabbing files[0] is gone — the caller
+        owns that decision now (single-file: pass files[0]["id"];
+        multi-file: pass the ID chosen in FilePickerDialog).
         """
         if source_type in ("torrent", "magnet"):
-            files  = self.item.get("files", [])
-            file_id = files[0].get("id", 0) if files else 0
-            return api.request_download_link_torrent(self.api_key, item_id, file_id)
+            fid = self.file_id if self.file_id is not None else 0
+            return api.request_download_link_torrent(self.api_key, item_id, fid)
 
         elif source_type == "webdl":
             return api.request_download_link_webdl(self.api_key, item_id)
@@ -359,7 +319,7 @@ class DownloadWorker(QRunnable):
         part_path  = os.path.join(self.download_dir, final_name + ".part")
         final_path = os.path.join(self.download_dir, final_name)
 
-        # Total size may be absent — that's fine, progress will show bytes only
+        # Total size may be absent — progress will pulse if so
         total_bytes    = int(response.headers.get("Content-Length", 0))
         received_bytes = 0
 
@@ -368,13 +328,12 @@ class DownloadWorker(QRunnable):
         try:
             with open(part_path, "wb") as fh:
                 for chunk in response.iter_content(chunk_size=DOWNLOAD_CHUNK_SIZE):
-                    if chunk:   # filter out keep-alive empty chunks
+                    if chunk:
                         fh.write(chunk)
                         received_bytes += len(chunk)
                         self.signals.progress.emit(received_bytes, total_bytes)
         except OSError as exc:
             self.signals.error.emit(f"Could not write file '{final_name}': {exc}")
-            # Clean up the incomplete .part file
             try:
                 os.remove(part_path)
             except OSError:
@@ -388,9 +347,8 @@ class DownloadWorker(QRunnable):
                 pass
             return
 
-        # Rename .part → final only after a clean write
+        # Rename .part -> final only after a clean write
         try:
-            # If a file with this name already exists, overwrite it.
             if os.path.exists(final_path):
                 os.remove(final_path)
             os.rename(part_path, final_path)
@@ -422,11 +380,10 @@ class DownloadWorker(QRunnable):
             # Try RFC 5987 encoded name first (filename*=UTF-8''...)
             match = re.search(r"filename\*=UTF-8''([^\s;]+)", content_disposition, re.IGNORECASE)
             if match:
-                from urllib.parse import unquote
                 filename = unquote(match.group(1))
             else:
                 # Fall back to plain filename="..."
-                match = re.search(r'filename=["\'"]?([^"\';\\r\\n]+)["\'"]?', content_disposition)
+                match = re.search(r'filename=["\']?([^"\';\r\n]+)["\']?', content_disposition)
                 if match:
                     filename = match.group(1).strip()
 
@@ -435,11 +392,10 @@ class DownloadWorker(QRunnable):
 
         # URL-decode before sanitising — TorBox sometimes returns
         # percent-encoded filenames (e.g. Atari%207800%20Box%20Art.rar)
-        from urllib.parse import unquote
         filename = unquote(filename)
 
         # Sanitise: remove characters Windows won't allow in filenames
         filename = re.sub(r'[\\/:*?"<>|]', "_", filename)
-        filename = filename.strip(". ")   # no leading/trailing dots or spaces
+        filename = filename.strip(". ")
 
         return filename or "download"

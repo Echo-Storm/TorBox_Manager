@@ -25,6 +25,7 @@
 #            Right-click header → Show/Hide Columns for optional fields.
 
 import os
+from urllib.parse import unquote
 import webbrowser
 from datetime import datetime
 
@@ -103,7 +104,7 @@ from constants import (
     STATUS_READY,
     TYPE_ICONS,
 )
-from dialogs  import AboutDialog, AddLinkDialog, AddMagnetDialog, SettingsDialog
+from dialogs  import AboutDialog, AddLinkDialog, AddMagnetDialog, FilePickerDialog, SettingsDialog
 from worker   import AddWorker, DeleteWorker, DownloadWorker, PollWorker
 
 
@@ -451,7 +452,7 @@ class MainWindow(QMainWindow):
         # Maps row_key → item dict (refreshed on every poll)
         self._row_items: dict[str, dict] = {}
         # Tracks which row_keys currently have a DownloadWorker running
-        self._downloading: set[str] = set()
+        self._downloading: dict[str, int] = {}  # key -> number of active download workers
         # Keys deleted by the user — suppressed for 2 poll cycles so they
         # don't reappear before TorBox finishes processing the delete.
         self._deleted_keys: set[str] = set()
@@ -1525,11 +1526,16 @@ class MainWindow(QMainWindow):
         self._start_download(key, item)
 
     def _start_download(self, key: str, item: dict):
-        """Validate download dir then submit a DownloadWorker."""
+        """
+        Validate download dir, resolve which file(s) to grab, then dispatch
+        one DownloadWorker per file.
+
+        For torrents/magnets with multiple files, shows FilePickerDialog first.
+        Single-file items and webdl/usenet skip the dialog entirely.
+        """
         download_dir = self.config.get("download_dir", "").strip()
 
         if not download_dir:
-            # Prompt user to choose a directory now
             chosen = QFileDialog.getExistingDirectory(
                 self, "Choose Download Directory", os.path.expanduser("~")
             )
@@ -1546,19 +1552,71 @@ class MainWindow(QMainWindow):
             )
             return
 
-        self._downloading.add(key)
-        name = item.get("name", key)
-        self._log(f"Starting download: {name}")
-        self._set_status(f"Downloading: {name}")
+        source_type = item.get("source_type", "")
+        files       = item.get("files", [])
 
-        # Swap progress bar to fetching state
+        # Decide which files to download.
+        # webdl and usenet don't have a files list — pass file_id=None, one worker.
+        # Torrents/magnets with one file — pass files[0]["id"] directly.
+        # Torrents/magnets with multiple files — show the picker, dispatch one worker per selection.
+        if source_type in ("torrent", "magnet") and len(files) > 1:
+            dlg = FilePickerDialog(item.get("name", key), files, self)
+            if dlg.exec() != QDialog.DialogCode.Accepted:
+                return
+            selected = dlg.selected_files()
+            if not selected:
+                return
+            for f in selected:
+                self._dispatch_download_worker(
+                    key=key,
+                    item=item,
+                    download_dir=download_dir,
+                    file_id=f["id"],
+                    file_name=f["name"].split("/")[-1] if "/" in f["name"] else f["name"],
+                )
+            return
+
+        # Single file or non-torrent — dispatch one worker
+        if source_type in ("torrent", "magnet"):
+            file_id   = files[0].get("id", 0) if files else 0
+            file_name = None
+        else:
+            file_id   = None
+            file_name = None
+
+        self._dispatch_download_worker(
+            key=key,
+            item=item,
+            download_dir=download_dir,
+            file_id=file_id,
+            file_name=file_name,
+        )
+
+    def _dispatch_download_worker(self, key: str, item: dict, download_dir: str,
+                                   file_id, file_name):
+        """
+        Submit a single DownloadWorker to the thread pool.
+
+        Handles the progress bar swap and button disable that were previously
+        inline in _start_download. Extracted so multi-file dispatch can call it
+        once per selected file without repeating that setup code.
+
+        Note: for multi-file torrents, multiple workers share the same row key.
+        The progress bar reflects the last worker to emit a signal — this is
+        acceptable for now. A per-file sub-row is a future improvement if needed.
+        """
+        self._downloading[key] = self._downloading.get(key, 0) + 1
+        display_name = file_name or item.get("name", key)
+        self._log(f"Starting download: {display_name}")
+        self._set_status(f"Downloading: {display_name}")
+
         row = self._row_index.get(key)
         if row is not None:
             pbar = self._table.cellWidget(row, COL_PROGRESS)
             if isinstance(pbar, QProgressBar):
                 pbar.setRange(0, 100)
                 pbar.setValue(0)
-                pbar.setFormat("Fetching…")
+                pbar.setFormat("Fetching...")
                 pbar.setStyleSheet(_PROGRESS_BAR_ACTIVE_STYLE)
             dl_btn = self._table.cellWidget(row, COL_DOWNLOAD)
             if isinstance(dl_btn, QPushButton):
@@ -1568,6 +1626,8 @@ class MainWindow(QMainWindow):
             api_key      = self.config.get("api_key", ""),
             item         = item,
             download_dir = download_dir,
+            file_id      = file_id,
+            file_name    = file_name,
         )
         worker.signals.progress.connect(
             lambda recv, total, k=key: self._on_download_progress(k, recv, total)
@@ -1603,12 +1663,32 @@ class MainWindow(QMainWindow):
             pbar.setFormat("")
 
     def _on_download_finished(self, key: str, file_path: str):
-        self._downloading.discard(key)
-        from urllib.parse import unquote
+        # Decrement the in-flight counter for this row.
+        # For multi-file torrents multiple workers share the same key —
+        # we only update the row UI once the last one finishes.
+        count = self._downloading.get(key, 1) - 1
+        if count > 0:
+            self._downloading[key] = count
+        else:
+            self._downloading.pop(key, None)
+
         fname = unquote(os.path.basename(file_path))
         clean_path = unquote(file_path)
-        self._log(f"Download complete: {fname}  →  {clean_path}")
+        self._log(f"Download complete: {fname}  ->  {clean_path}")
         self._set_status(f"Done: {fname}")
+
+        # Tray notification — only if enabled in settings
+        if self.config.get("tray_notifications", False):
+            self._tray.showMessage(
+                "Download complete",
+                fname,
+                self._tray.icon(),
+                4000,
+            )
+
+        # Only update the row to Done state when all files for this key are finished
+        if key in self._downloading:
+            return
 
         row = self._row_index.get(key)
         if row is None:
@@ -1634,7 +1714,11 @@ class MainWindow(QMainWindow):
             )
 
     def _on_download_error(self, key: str, msg: str):
-        self._downloading.discard(key)
+        count = self._downloading.get(key, 1) - 1
+        if count > 0:
+            self._downloading[key] = count
+        else:
+            self._downloading.pop(key, None)
         self._log(f"Download error: {msg}", "ERROR")
         self._set_status(f"Download failed — {msg}")
 
@@ -1652,11 +1736,13 @@ class MainWindow(QMainWindow):
 
     @staticmethod
     def _open_in_explorer(file_path: str):
-        """Open the folder containing the downloaded file."""
-        import subprocess
+        """Open the folder containing the downloaded file and select it."""
         folder = os.path.dirname(file_path)
         try:
-            subprocess.Popen(f'explorer /select,"{file_path}"')
+            # explorer /select highlights the file in the folder — more useful than
+            # just opening the folder. Use list form to handle paths with spaces safely.
+            import subprocess
+            subprocess.Popen(["explorer", f"/select,{file_path}"])
         except Exception:
             try:
                 os.startfile(folder)

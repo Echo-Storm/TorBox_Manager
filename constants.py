@@ -9,7 +9,7 @@
 
 APP_NAME        = "TorBox Manager"
 APP_SUBTITLE    = "EchoStorm Edition"
-APP_VERSION     = "0.3.0"
+APP_VERSION     = "0.4.0"
 LOG_FILENAME    = "TorBox_Manager_Log.txt"
 CONFIG_FILENAME = "config.json"
 
@@ -197,4 +197,5 @@ FONT_LOG_SIZE   = 8            # pt — log strip
 # Links
 # ---------------------------------------------------------------------------
 
-KOFI_URL = "https://ko-fi.com/xechostormx"
+KOFI_URL     = "https://ko-fi.com/xechostormx"
+REFERRAL_URL = "https://torbox.app/subscription?referral=bd158452-a00c-4bce-be2a-593351ccaec7"
