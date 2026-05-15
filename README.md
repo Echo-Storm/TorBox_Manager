@@ -1,131 +1,142 @@
 # TorBox Manager — EchoStorm Edition
 
-A PyQt6 desktop client for the [TorBox](https://torbox.app) debrid service.  
-Manages torrents, magnet links, hoster URLs, and NZBs from a single unified queue — with in-app file download, live progress bars, and system tray support.
+![TorBox Manager](TorboxManager.jpg)
 
-> Companion tool to [Echo Audio Converter](https://github.com/xechostormx). Same stack, same conventions, same aesthetic.
+A desktop queue manager for [TorBox](https://torbox.app) debrid. Add torrents, magnets, hoster links, and NZBs — watch them process on TorBox's servers — download finished files straight to your machine. No browser tab required.
 
----
-
-## Features
-
-- **Four add types** — Magnet link, Torrent file, Hoster URL, NZB file
-- **Clipboard paste buttons** — one-click paste in the Magnet and Hoster Link dialogs
-- **Unified queue table** — all active TorBox items in one view regardless of type
-- **Optional columns** — Seeds, Peers, Ratio, ETA, Added; right-click the column header to show/hide
-- **In-app download** — files stream directly to your chosen folder with a live progress bar
-- **Auto-polling** — queue refreshes on a configurable interval (default 30 seconds)
-- **Non-blocking UI** — add and delete operations run on background threads; the UI never freezes
-- **Log strip** — timestamped event log with an "errors only" filter toggle
-- **System tray** — minimizes to tray on close; Open / About / Restart / Quit menu
-- **EchoStorm dark theme** — matches Echo Audio Converter's visual identity
-- **Self-contained** — single folder, isolated venv, no installer, no registry
+Built for people coming from Real-Debrid who want that same familiar desktop workflow on TorBox.
 
 ---
 
-## Requirements
+## What it looks like
 
-- Windows 10 / 11
-- Python 3.10 or newer — [python.org](https://www.python.org/downloads/)
-- A [TorBox](https://torbox.app) account and API key
+The screenshot above is a real session. Eight items in the queue — torrents, a magnet, a hoster link, and an NZB — all managed from one window. The MAME set is actively downloading at 6%. Everything else is cached and ready to grab.
 
 ---
 
-## Quick Start
+## What you need
 
-1. **Download or clone** this repository into a folder of your choice
-2. **Double-click `launch.bat`**  
-   On first run it creates a virtual environment and installs all dependencies automatically. This takes about a minute.
-3. The app opens and immediately prompts for your **API key**  
-   Find it at torbox.app → Account → API
-4. Set your **download directory** in the same Settings dialog
-5. Hit **Save** — you're ready
+- **Windows 10 or 11**
+- **Python 3.10 or newer** — if you don't have it, grab it from [python.org/downloads](https://www.python.org/downloads/)
+  - On the installer's first screen, **check the box that says "Add Python to PATH"** before you click Install. Easy to miss, breaks everything if you skip it.
+- **A TorBox account** and your API key — find it at torbox.app → Account → API
 
-All future launches are instant: just double-click `launch.bat` (or pin it to your taskbar / desktop as a shortcut).
+That's it. No other installs, no admin rights needed.
 
 ---
 
-## Notes
+## How to install
 
-- **Queue population** — items appear as TorBox registers each add. Adding a batch may take a few seconds per item.
-- **"Found Cached Torrent"** — if TorBox already has a torrent cached it reuses it; your item will appear as Ready almost immediately.
-- **Download errors** — if a torrent shows "error processing your request" on every attempt it may be a bad cache entry on TorBox's side. Delete it, re-add it, or contact TorBox support.
-- **Log file** — `TorBox_Manager_Log.txt` is overwritten on each launch. It contains the current session only. For persistent history, copy it before restarting.
-- **Multi-file torrents** — currently downloads the first file in a torrent's file list. A file picker dialog is planned for a future version.
+**Option 1 — Download the zip (easiest)**
 
----
+1. Click the green **Code** button at the top of this page → **Download ZIP**
+2. Unzip it anywhere you want (Desktop, C:\Tools, wherever)
+3. Open the folder and double-click **`launch.bat`**
 
-## File Structure
+**Option 2 — Git clone**
 
 ```
-TorBox_Manager/
-├── main.py                  Entry point — logging, QApplication, MainWindow
-├── ui.py                    MainWindow — left panel, queue table, log strip, status bar
-├── dialogs.py               Add Magnet, Add Link, Settings, About dialogs
-├── api.py                   All TorBox API calls — no Qt, no threads
-├── worker.py                PollWorker, DownloadWorker, AddWorker, DeleteWorker
-├── config.py                JSON config load/save
-├── constants.py             API URLs, theme colors, column indices, static values
-├── assets/
-│   └── tray_icon.png        32×32 tray icon (auto-generated placeholder if missing)
-├── requirements.txt         PyQt6, requests
-├── launch.bat               First-run venv setup + app launcher
-├── config.json              Created on first save — API key, download dir, settings
-└── TorBox_Manager_Log.txt   Created on launch — current session events and errors
+git clone https://github.com/Echo-Storm/TorBox_Manager
+cd TorBox_Manager
+launch.bat
 ```
+
+---
+
+## First launch
+
+The first time you run `launch.bat` it sets up a virtual environment and downloads the two dependencies (PyQt6 and requests). This takes about a minute and only happens once. After that, launches are instant.
+
+When the app opens it'll ask for your **API key** and a **download folder**. Fill those in, hit Save, and you're done.
+
+Pin `launch.bat` to your taskbar or make a desktop shortcut for easy access later.
+
+---
+
+## What it does
+
+- **Add anything** — magnet links, .torrent files, hoster URLs (1Fichier, Mega, Pixeldrain etc.), and .nzb files
+- **Unified queue** — everything in one table regardless of type, with status, size, seeds, peers, progress
+- **Multi-file torrents** — picks which files you want before downloading, so you're not stuck grabbing the whole set
+- **Downloads to your folder** — streams directly to wherever you set, with a live progress bar per file
+- **Stays out of your way** — minimizes to the system tray, polls in the background, log strip at the bottom if you want to see what's happening
+- **Tray notifications** — optional popup when a download finishes (off by default, toggle in Settings)
 
 ---
 
 ## Settings
 
-| Setting | Description | Default |
-|---|---|---|
-| API Key | TorBox bearer token — required | *(empty)* |
-| Download Directory | Where completed files are saved | *(prompted on first download)* |
-| Poll Interval | How often to check TorBox for status updates | 30 seconds |
-| Minimize to Tray | Hide to tray on close instead of quitting | Enabled |
+Open via the gear icon bottom-left.
 
-Settings are stored in `config.json` alongside the script files. No registry, no AppData.
+| Setting | What it does | Default |
+|---|---|---|
+| API Key | Your TorBox bearer token | required |
+| Download Directory | Where files land | prompted on first download |
+| Poll Interval | How often to check TorBox | 30 seconds |
+| Minimize to Tray | Hide to tray on close instead of quitting | on |
+| Tray Notifications | Popup when a download finishes | off |
+
+Config saves to `config.json` in the app folder. Nothing goes to the registry or AppData.
 
 ---
 
-## Roadmap
+## Frequently asked things
 
-### v0.1 ✓
-Four add types, unified queue, in-app download, system tray, EchoStorm theme.
+**It said "Python was not found" when I ran the bat file**
+You either don't have Python installed or you forgot to check "Add Python to PATH" during install. Reinstall Python from python.org and make sure that box is checked.
 
-### v0.2 ✓
-Optional queue columns (Seeds, Peers, Ratio, ETA, Added), right-click column visibility,
-auto-retry on transient download link errors, minimize-to-tray setting.
+**The window opened and closed immediately**
+Something went wrong during setup. Open a command prompt in the app folder and run `launch.bat` from there — you'll see the actual error message.
 
-### v0.3 ✓
-Clipboard paste buttons, threaded add/delete, log filter, status bar breakdown,
-layout polish, log file overwrite on startup.
+**My item shows a hash instead of a name (like `694f6fe710f5...`)**
+That's a TorBox thing on some usenet items — it's returning the internal hash as the name. Nothing we can fix on this end, but the download still works fine.
 
-### v0.4 (planned)
-- Multi-file torrent picker dialog
-- Pause polling when minimized with no active downloads
+**Where's the log file?**
+`TorBox_Manager_Log.txt` in the app folder. It gets overwritten each launch so it only has the current session.
 
 ---
 
-## Dependencies
+## Files in the folder
 
-| Package | Version | Purpose |
-|---|---|---|
-| PyQt6 | ≥ 6.5.0 | UI framework, threading, system tray |
-| requests | ≥ 2.28.0 | All HTTP communication with TorBox API |
+```
+TorBox_Manager/
+├── launch.bat          Double-click this to run the app
+├── main.py             
+├── ui.py               
+├── dialogs.py          
+├── api.py              
+├── worker.py           
+├── config.py           
+├── constants.py        
+├── assets/
+│   └── tray_icon.png   
+├── requirements.txt    
+├── config.json         Created on first launch
+└── TorBox_Manager_Log.txt  Created on first launch
+```
 
-Both are installed automatically by `launch.bat` on first run.
+---
+
+## Version history
+
+**v0.4.0** — Multi-file torrent picker, tray notifications, referral link in About, User-Agent header, various fixes
+
+**v0.3.0** — Clipboard paste buttons, threaded add/delete, log filter, status bar breakdown, layout polish
+
+**v0.2.0** — Optional columns (Seeds, Peers, Ratio, ETA, Added), auto-retry on download errors, minimize-to-tray toggle
+
+**v0.1.0** — Initial release
 
 ---
 
 ## Support
 
-If this saves you time, a Ko-fi goes a long way:  
-**[ko-fi.com/xechostormx](https://ko-fi.com/xechostormx)** ♥
+If this is useful, a Ko-fi helps a lot: [ko-fi.com/xechostormx](https://ko-fi.com/xechostormx) ♥
+
+Not on TorBox yet: [referral link](https://torbox.app/subscription?referral=bd158452-a00c-4bce-be2a-593351ccaec7)
 
 ---
 
 ## License
 
-MIT License — see `LICENSE` for details.
+MIT — see LICENSE
