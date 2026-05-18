@@ -56,6 +56,7 @@ from constants import (
     COLOR_PANEL_ALT,
     COLOR_TEXT,
     COLOR_TEXT_MUTED,
+    DEFAULT_MAX_CONCURRENT_DL,
     FONT_UI_FAMILY,
     FONT_UI_SIZE,
     KOFI_URL,
@@ -485,6 +486,24 @@ class SettingsDialog(QDialog):
             "Off by default."
         ))
 
+        # ---- Download concurrency ----
+        layout.addWidget(_section_label("Concurrent Downloads"))
+
+        concur_row = QHBoxLayout()
+        self._concur_input = QLineEdit()
+        self._concur_input.setValidator(QIntValidator(1, 10))
+        self._concur_input.setText(str(self._config.get("max_concurrent_downloads", DEFAULT_MAX_CONCURRENT_DL)))
+        self._concur_input.setFixedWidth(80)
+        concur_row.addWidget(self._concur_input)
+        concur_row.addWidget(QLabel("max simultaneous"))
+        concur_row.addStretch()
+        layout.addLayout(concur_row)
+
+        layout.addWidget(_muted_label(
+            "Maximum number of files downloaded at the same time. "
+            "Download All queues the rest and starts them as slots free up."
+        ))
+
         # ---- Poll Interval ----
         layout.addWidget(_section_label("Queue Refresh Interval"))
 
@@ -551,6 +570,12 @@ class SettingsDialog(QDialog):
         updated["download_dir"]       = self._dir_input.text().strip()
         updated["minimize_to_tray"]   = self._tray_cb.isChecked()
         updated["tray_notifications"] = self._notify_cb.isChecked()
+        try:
+            concur_val = int(self._concur_input.text())
+            concur_val = max(1, min(10, concur_val))
+        except ValueError:
+            concur_val = DEFAULT_MAX_CONCURRENT_DL
+        updated["max_concurrent_downloads"] = concur_val
         try:
             poll_val = int(self._poll_input.text())
             poll_val = max(MIN_POLL_INTERVAL_SEC, min(MAX_POLL_INTERVAL_SEC, poll_val))

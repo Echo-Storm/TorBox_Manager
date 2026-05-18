@@ -10,10 +10,12 @@
 
 import json
 import os
+import sys
 
 from constants import (
     CONFIG_FILENAME,
     COL_VISIBILITY_DEFAULTS,
+    DEFAULT_MAX_CONCURRENT_DL,
     DEFAULT_POLL_INTERVAL_SEC,
 )
 
@@ -24,12 +26,14 @@ from constants import (
 # ---------------------------------------------------------------------------
 
 DEFAULTS = {
-    "api_key":          "",    # TorBox bearer token — required before any API call
-    "download_dir":     "",    # absolute path; empty means user hasn't configured it yet
-    "poll_interval":    DEFAULT_POLL_INTERVAL_SEC,
-    "columns":          dict(COL_VISIBILITY_DEFAULTS),  # optional column visibility
-    "minimize_to_tray":     True,   # hide to tray on close vs quit
-    "tray_notifications":  False,  # show tray popup when a download finishes
+    "api_key":                 "",    # TorBox bearer token — required before any API call
+    "download_dir":            "",    # absolute path; empty means user hasn't configured it yet
+    "poll_interval":           DEFAULT_POLL_INTERVAL_SEC,
+    "max_concurrent_downloads": DEFAULT_MAX_CONCURRENT_DL,
+    "columns":                 dict(COL_VISIBILITY_DEFAULTS),  # optional column visibility
+    "minimize_to_tray":        True,   # hide to tray on close vs quit
+    "tray_notifications":      False,  # show tray popup when a download finishes
+    "window_geometry":         "",    # hex-encoded QByteArray for restoring window position/size
 }
 
 # ---------------------------------------------------------------------------
@@ -37,8 +41,11 @@ DEFAULTS = {
 # ---------------------------------------------------------------------------
 
 def _config_path() -> str:
-    """Return the absolute path to config.json, always next to this script."""
-    here = os.path.dirname(os.path.abspath(__file__))
+    """Return the absolute path to config.json, always next to the exe/script."""
+    if getattr(sys, 'frozen', False):
+        here = os.path.dirname(sys.executable)
+    else:
+        here = os.path.dirname(os.path.abspath(__file__))
     return os.path.join(here, CONFIG_FILENAME)
 
 

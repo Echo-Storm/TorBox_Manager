@@ -9,7 +9,7 @@
 
 APP_NAME        = "TorBox Manager"
 APP_SUBTITLE    = "EchoStorm Edition"
-APP_VERSION     = "0.4.0"
+APP_VERSION     = "0.5.0"
 LOG_FILENAME    = "TorBox_Manager_Log.txt"
 CONFIG_FILENAME = "config.json"
 
@@ -155,9 +155,12 @@ BADGE_COLORS = {
 # Polling
 # ---------------------------------------------------------------------------
 
-DEFAULT_POLL_INTERVAL_SEC = 30   # how often PollWorker refreshes the queue
-MIN_POLL_INTERVAL_SEC     = 10   # lower bound exposed in Settings dialog
-MAX_POLL_INTERVAL_SEC     = 300  # upper bound exposed in Settings dialog
+DEFAULT_POLL_INTERVAL_SEC     = 30   # how often PollWorker refreshes the queue
+MIN_POLL_INTERVAL_SEC         = 10   # lower bound exposed in Settings dialog
+MAX_POLL_INTERVAL_SEC         = 300  # upper bound exposed in Settings dialog
+IDLE_POLL_INTERVAL_SEC        = 300  # interval used when window is hidden and nothing is downloading
+
+DEFAULT_MAX_CONCURRENT_DL     = 3    # simultaneous local downloads
 
 # ---------------------------------------------------------------------------
 # Download

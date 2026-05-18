@@ -399,3 +399,51 @@ class DownloadWorker(QRunnable):
         filename = filename.strip(". ")
 
         return filename or "download"
+
+
+# ---------------------------------------------------------------------------
+# LinkRequestWorker — request a TorBox download URL without streaming the file
+# ---------------------------------------------------------------------------
+
+class LinkRequestSignals(QObject):
+    finished = pyqtSignal(str)   # the resolved download URL
+    error    = pyqtSignal(str)   # human-readable error
+
+
+class LinkRequestWorker(QRunnable):
+    """Fetch a time-limited TorBox download link for a single item/file."""
+
+    def __init__(self, api_key: str, item: dict, file_id=None):
+        super().__init__()
+        self.signals   = LinkRequestSignals()
+        self._api_key  = api_key
+        self._item     = item
+        self._file_id  = file_id
+
+    def run(self):
+        item        = self._item
+        source_type = item.get("source_type", "")
+        item_id     = item.get("id")
+
+        if source_type in ("torrent", "magnet"):
+            fid    = self._file_id
+            if fid is None:
+                files = item.get("files", [])
+                fid   = files[0].get("id", 0) if files else 0
+            result = api.request_download_link_torrent(self._api_key, item_id, fid)
+        elif source_type == "webdl":
+            result = api.request_download_link_webdl(self._api_key, item_id)
+        elif source_type == "usenet":
+            result = api.request_download_link_usenet(self._api_key, item_id)
+        else:
+            self.signals.error.emit(f"Unknown source type: {source_type}")
+            return
+
+        if result.get("ok"):
+            url = result.get("data", "")
+            if url:
+                self.signals.finished.emit(url)
+            else:
+                self.signals.error.emit("No URL in response")
+        else:
+            self.signals.error.emit(result.get("detail", "Failed to get link"))
