@@ -1,0 +1,87 @@
+# .github/workflows/build.yml
+# TorBox Manager — EchoStorm Edition
+#
+# Builds TorBox_Manager.exe on a real Windows runner using PyInstaller,
+# then attaches it to the GitHub Release that triggered this workflow.
+#
+# HOW TO USE:
+#   1. Copy this file to .github/workflows/build.yml in your repo
+#   2. Copy TorBox_Manager.ico into tbm/assets/ in your repo
+#   3. Push, then create a Release (tag it e.g. v0.4.0)
+#   4. This workflow fires automatically and uploads the exe to that release
+#
+# The workflow also runs on pushes to main so you can verify the build
+# doesn't break — but only releases trigger the upload step.
+
+name: Build Windows EXE
+
+on:
+  push:
+    branches: [main]
+  release:
+    types: [published]
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install PyQt6>=6.5.0 requests>=2.28.0 pyinstaller
+
+      - name: Build exe
+        working-directory: tbm
+        run: |
+          pyinstaller `
+            --onefile `
+            --windowed `
+            --name TorBox_Manager `
+            --icon assets/TorBox_Manager.ico `
+            --hidden-import PyQt6.QtWidgets `
+            --hidden-import PyQt6.QtGui `
+            --hidden-import PyQt6.QtCore `
+            --hidden-import PyQt6.QtNetwork `
+            --exclude-module PyQt6.QtBluetooth `
+            --exclude-module PyQt6.QtDBus `
+            --exclude-module PyQt6.QtDesigner `
+            --exclude-module PyQt6.QtHelp `
+            --exclude-module PyQt6.QtMultimedia `
+            --exclude-module PyQt6.QtOpenGL `
+            --exclude-module PyQt6.QtPdf `
+            --exclude-module PyQt6.QtPositioning `
+            --exclude-module PyQt6.QtQml `
+            --exclude-module PyQt6.QtQuick `
+            --exclude-module PyQt6.QtSensors `
+            --exclude-module PyQt6.QtSerialPort `
+            --exclude-module PyQt6.QtSql `
+            --exclude-module PyQt6.QtSvg `
+            --exclude-module PyQt6.QtTest `
+            --exclude-module PyQt6.QtWebChannel `
+            --exclude-module PyQt6.QtWebSockets `
+            --exclude-module PyQt6.QtXml `
+            main.py
+
+      - name: Verify exe was created
+        run: |
+          if (!(Test-Path "tbm\dist\TorBox_Manager.exe")) {
+            Write-Error "Build failed — TorBox_Manager.exe not found"
+            exit 1
+          }
+          $size = (Get-Item "tbm\dist\TorBox_Manager.exe").length / 1MB
+          Write-Host ("Exe size: {0:N1} MB" -f $size)
+
+      - name: Upload exe to Release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: tbm/dist/TorBox_Manager.exe

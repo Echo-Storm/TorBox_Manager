@@ -1,5 +1,5 @@
 # TorBox Manager — EchoStorm Edition
-# Project Specification v0.3
+# Project Specification v0.4
 
 ---
 
@@ -12,32 +12,84 @@ files directly to a user-defined local directory. Companion tool to Echo Audio C
 
 ---
 
+## Distribution
+
+Primary distribution is a standalone Windows exe built via GitHub Actions. No Python
+installation required on the end user's machine.
+
+- **Build:** PyInstaller onefile + windowed, UPX disabled (avoids AV false positives)
+- **Runner:** `windows-latest` GitHub Actions runner — produces a genuine Windows PE
+  executable, not a Linux ELF binary
+- **Trigger:** workflow fires on push to `main` (build only) and on Release publish
+  (build + upload exe as release asset)
+- **Spec:** `.github/workflows/build.yml` at repo root; source lives under `tbm/`
+
+Source-only users can still run via `launch.bat` (Python 3.10+, self-contained venv).
+
+---
+
+## Frozen Path Handling
+
+PyInstaller onefile extracts to a temporary directory at runtime (`sys._MEIPASS`).
+Without correction, `config.json` and the log file would be written there and lost
+on each launch.
+
+**Fix applied in v0.4.0:**
+
+`config.py` — `_config_path()`:
+```python
+if getattr(sys, "frozen", False):
+    here = os.path.dirname(os.path.abspath(sys.executable))
+else:
+    here = os.path.dirname(os.path.abspath(__file__))
+```
+
+`main.py` — `_setup_logging()`: identical frozen/unfrozen detection for `log_dir`.
+
+Both `config.json` and `TorBox_Manager_Log.txt` land next to the exe in all cases.
+
+---
+
 ## Tech Stack
 
 - Python 3.10+
 - PyQt6 (UI, threading, tray)
 - requests (all HTTP — synchronous, called only from worker threads)
 - JSON (config persistence — no database)
-- Isolated venv, launched via launch.bat
+- PyInstaller (exe packaging — build-time only, not a runtime dependency)
+- Isolated venv for source runs, launched via `launch.bat`
 
 ---
 
-## File Structure
+## Repo Structure
 
 ```
-TorBox_Manager/
-├── main.py           # QApplication entry point, file logging, MainWindow launch
-├── ui.py             # MainWindow: left panel, queue table, log strip, status bar widget
-├── dialogs.py        # AddMagnetDialog, AddLinkDialog, SettingsDialog, AboutDialog
-├── api.py            # All TorBox API calls — returns plain dicts, zero Qt imports
-├── worker.py         # QRunnable workers: Poll, Download, Add, Delete
-├── config.py         # load_config() / save_config() — JSON file, no logic
-├── constants.py      # API base URL, version string, theme colors, column defs
-├── assets/
-│   └── tray_icon.png # 32x32 tray icon — auto-generated placeholder if missing
-├── requirements.txt  # PyQt6, requests
-└── launch.bat        # Creates venv on first run, installs deps, launches main.py
+TorBox_Manager/               ← repo root
+├── .github/
+│   └── workflows/
+│       └── build.yml         ← GitHub Actions: builds exe, uploads to release
+├── tbm/                      ← all source
+│   ├── assets/
+│   │   ├── TorBox_Manager.ico  ← 7-size ICO (16–256px, 32bpp) — exe + taskbar icon
+│   │   └── tray_icon.png       ← 64×64 PNG — system tray icon
+│   ├── main.py
+│   ├── ui.py
+│   ├── dialogs.py
+│   ├── api.py
+│   ├── worker.py
+│   ├── config.py
+│   ├── constants.py
+│   ├── requirements.txt
+│   ├── launch.bat
+│   ├── README.md
+│   ├── CHANGELOG.md
+│   └── SPEC.md
+└── README.md                 ← repo-level, shown on GitHub; targets exe users
 ```
+
+Files created at runtime (next to exe or next to source, depending on run mode):
+- `config.json` — written on first Settings save
+- `TorBox_Manager_Log.txt` — overwritten on each launch (current session only)
 
 ---
 
@@ -62,7 +114,7 @@ from a thread.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│  v0.3.0  ─────────── | TORBOX MANAGER | ─────────── ECHOSTORM EDITION │
+│  v0.4.0  ─────────── | TORBOX MANAGER | ─────────── ECHOSTORM EDITION │
 ├──────────────────┬──────────────────────────────────────────────────┤
 │  LEFT PANEL      │  QUEUE TABLE                                     │
 │  (fixed 220px)   │  Name|Type|Status|Size|Seeds|Peers|Ratio|ETA|   │
@@ -133,18 +185,28 @@ All four add operations run on a background AddWorker thread. The UI is never bl
 All workers communicate back to the main thread exclusively via Qt signals.
 
 ### DownloadWorker detail
+- Takes an explicit `file_id` parameter — caller decides which file to download
 - Retries link resolution up to 3 times with 3s delay (TorBox transient errors)
 - Writes to `filename.part` during download; renames to final name on completion
 - Incomplete `.part` files are deleted on error
 - Filename extracted from Content-Disposition header (RFC 5987 + plain fallback)
 - Falls back to item display name; sanitises result for Windows filesystem
 
+### Multi-file torrent flow
+1. User clicks Download on a torrent row
+2. `ui.py` checks `len(item["files"]) > 1`
+3. If true: open `FilePickerDialog` (modal) — table of files with name, size, checkbox
+4. Select All / Deselect All buttons; OK disabled until at least one file checked
+5. On OK: one `DownloadWorker` dispatched per checked file
+6. Single-file torrents and all webdl/usenet items skip the dialog entirely
+
 ---
 
 ## TorBox API Endpoints (v1)
 
-Base URL: `https://api.torbox.app/v1/api`  
+Base URL: `https://api.torbox.app/v1/api`
 Auth: `Authorization: Bearer <api_key>` header on every request.
+User-Agent: `TorBoxManager/<version>` on every request.
 
 | Action | Method | Endpoint |
 |--------|--------|----------|
@@ -175,7 +237,7 @@ returns a stale server-side snapshot that may only contain the most recently add
 | `id` | int | Unique per source type |
 | `name` | str | Display name |
 | `size` | int | Bytes |
-| `progress` | int | 0–100 |
+| `progress` | int or float | 0–100 (int) or 0.0–1.0 (float) depending on state — normalised by `_parse_progress()` |
 | `download_state` | str | e.g. `"uploading (no peers)"` — not the ready signal |
 | `cached` | bool | **Primary ready signal** — True means downloadable now |
 | `download_finished` | bool | TorBox-side download complete |
@@ -192,8 +254,8 @@ reflects seeding activity and may read `"uploading (no peers)"` even when fully 
 
 ## System Tray
 
-- Icon: green downward arrow on dark rounded square (32×32 PNG)
-- Auto-generated programmatically if `assets/tray_icon.png` is missing
+- Icon: `assets/tray_icon.png` — 64×64 green tech-cube PNG
+- Auto-generated programmatically if file is missing
 - Closing the window hides to tray (configurable — can disable in Settings)
 - Double-click tray icon to restore
 - Right-click menu: Open / About / Restart / Quit
@@ -208,15 +270,17 @@ reflects seeding activity and may read `"uploading (no peers)"` even when fully 
 | download_dir | str | "" | Prompted on first download if empty |
 | poll_interval | int | 30 | Seconds; range 10–300 |
 | minimize_to_tray | bool | true | Hide vs quit on window close |
+| tray_notifications | bool | false | Tray popup on download complete |
 | columns | dict | all true | Per-column visibility flags |
 
-Stored in `config.json` alongside the script files. No registry, no AppData.
+Stored in `config.json` next to the exe (frozen) or next to the source files (dev).
+No registry, no AppData.
 
 ---
 
 ## Logging
 
-- File: `TorBox_Manager_Log.txt` alongside script files
+- File: `TorBox_Manager_Log.txt` next to exe (frozen) or source files (dev)
 - Mode: overwrite on each launch (`mode='w'`) — current session only
 - Format: `YYYY-MM-DD HH:MM:SS [LEVEL] message`
 - Levels used: DEBUG (file only during dev), INFO, WARN, ERROR
@@ -258,6 +322,22 @@ Stored in `config.json` alongside the script files. No registry, no AppData.
 
 ---
 
+## Known Gaps / Next Session
+
+- Download concurrency — all DownloadWorkers run in parallel up to QThreadPool's
+  default limit. A max-concurrent setting (default 2–3) would be more practical for
+  large Download All operations.
+- Right-click row context menu — Copy name, Copy link, Select files (multi-file
+  torrents), Open in browser (webdl).
+- Usenet hash names — investigate whether TorBox populates an alternative field
+  (`original_name`, `title`) that's more readable than the bare hex hash.
+- Polling pause when minimized with no active local downloads — check `isHidden()`
+  and `len(_downloading) == 0`; fall back to a longer interval (e.g. 5 min).
+- Log strip auto-clear — `_log_lines` grows unbounded; trim oldest 250 after ~500.
+- Window geometry persistence — save/restore via `saveGeometry()` / `restoreGeometry()`.
+
+---
+
 ## Version
 
-v0.3.0 — 2026-05-15
+v0.4.0 — 2026-05-18

@@ -4,6 +4,14 @@
 
 ## v0.4.0 — 2026-05-15
 
+### Distribution
+- Standalone Windows exe — no Python installation required. Built via GitHub Actions
+  on a Windows runner using PyInstaller (onefile, windowed, UPX disabled).
+  `config.json` and `TorBox_Manager_Log.txt` are written next to the exe, not into
+  the PyInstaller temp extraction directory.
+- App icon — green tech-cube icon across all sizes (16, 24, 32, 48, 64, 128, 256px
+  ICO + 64px tray PNG).
+
 ### Features
 - Multi-file torrent picker — torrents with more than one file now open a dialog
   before downloading. Shows all files with name and size, checkbox per file,
@@ -24,6 +32,9 @@
   paths with spaces correctly. Falls back to os.startfile on failure.
 - api.py: added User-Agent header (TorBoxManager/x.x.x) to all API requests.
 - config.py: added tray_notifications default (False).
+- config.py: _config_path() now uses sys.executable when running as a frozen exe
+  so config.json lands next to the exe rather than in the PyInstaller temp dir.
+- main.py: log path uses the same frozen/unfrozen detection as config.py.
 - constants.py: added REFERRAL_URL constant.
 
 ---
