@@ -10,7 +10,7 @@ Built for people coming from Real-Debrid who want that same familiar desktop wor
 
 ## What it looks like
 
-The screenshot above is a real session. Eight items in the queue — torrents, a magnet, a hoster link, and an NZB — all managed from one window. The MAME set is actively downloading at 6%. Everything else is cached and ready to grab.
+The screenshot above is a real session from v0.3. Eight items in the queue — torrents, a magnet, a hoster link, and an NZB — all managed from one window. The MAME set is actively downloading at 6%. Everything else is cached and ready to grab.
 
 ---
 
@@ -47,8 +47,11 @@ When the app opens it'll ask for your **API key** and a **download folder**. Fil
 - **Unified queue** — everything in one table regardless of type, with status, size, seeds, peers, progress
 - **Multi-file torrents** — picks which files you want before downloading, so you're not stuck grabbing the whole set
 - **Downloads to your folder** — streams directly to wherever you set, with a live progress bar per file
-- **Stays out of your way** — minimizes to the system tray, polls in the background, log strip at the bottom if you want to see what's happening
+- **Controlled downloads** — concurrency limit keeps your connection usable; Download All queues everything and feeds the next item as each slot frees up
+- **Right-click rows** — Copy Name, Copy Download Link, Open in Browser (hoster links) — right on the row
+- **Stays out of your way** — minimizes to the system tray, slows its polling to 5-minute intervals when idle so it's not hammering the API all night
 - **Tray notifications** — optional popup when a download finishes (off by default, toggle in Settings)
+- **Remembers where you left it** — window position and size restored on every launch
 
 ---
 
@@ -60,6 +63,7 @@ Open via the gear icon bottom-left.
 |---|---|---|
 | API Key | Your TorBox bearer token | required |
 | Download Directory | Where files land | prompted on first download |
+| Concurrent Downloads | Max simultaneous local downloads | 3 |
 | Poll Interval | How often to check TorBox | 30 seconds |
 | Minimize to Tray | Hide to tray on close instead of quitting | on |
 | Tray Notifications | Popup when a download finishes | off |
@@ -74,7 +78,7 @@ Config saves to `config.json` next to the exe. Nothing goes to the registry or A
 That's normal for freshly built executables — Defender scans them on first launch. If it hard-blocks it: right-click the exe → Properties → Unblock. This is a false positive; the exe bundles Python and PyQt6 and nothing else.
 
 **My item shows a hash instead of a name (like `694f6fe710f5...`)**
-That's a TorBox thing on some usenet items — it's returning the internal hash as the name. Nothing we can fix on this end, but the download still works fine.
+That's a TorBox thing on some usenet items — it returns the internal hash before it resolves the real name. The app now renders those in italic/dimmed text so you know it's a pending resolution, not a bug. The download still works fine, and the name updates on the next poll once TorBox sorts it out.
 
 **Where's the log file?**
 `TorBox_Manager_Log.txt` next to the exe. It gets overwritten each launch so it only has the current session.
@@ -85,6 +89,8 @@ Clone the repo, install Python 3.10+, and run `launch.bat`. See the `tbm/` folde
 ---
 
 ## Version history
+
+**v0.5.0** — Concurrency limit, right-click row menu, Retry button, polling pause when idle, window geometry persistence, usenet hash dimming, log auto-trim, 7 bug fixes
 
 **v0.4.0** — Standalone exe build, multi-file torrent picker, tray notifications, referral link in About, User-Agent header, various fixes
 
@@ -100,7 +106,7 @@ Clone the repo, install Python 3.10+, and run `launch.bat`. See the `tbm/` folde
 
 If this is useful, a Ko-fi helps a lot: [ko-fi.com/xechostormx](https://ko-fi.com/xechostormx) ♥
 
-Not on TorBox yet: [referral link](https://torbox.app/subscription?referral=bd158452-a00c-4bce-be2a-593351ccaec7)
+Not on TorBox yet? [referral link](https://torbox.app/subscription?referral=bd158452-a00c-4bce-be2a-593351ccaec7)
 
 ---
 

@@ -1,5 +1,5 @@
 # TorBox Manager — EchoStorm Edition
-# Project Specification v0.4
+# Project Specification v0.5
 
 ---
 
@@ -181,6 +181,7 @@ All four add operations run on a background AddWorker thread. The UI is never bl
 | DownloadWorker | One per file | Resolves download link, streams file to disk with .part rename |
 | AddWorker | One-shot | Submits a single add operation; takes a lambda, emits (success, detail) |
 | DeleteWorker | One-shot | Deletes a single item; passes row_key through signal for UI removal |
+| LinkRequestWorker | On-demand | Fetches a time-limited download URL without streaming; used by right-click context menu for Copy Link / Open in Browser |
 
 All workers communicate back to the main thread exclusively via Qt signals.
 
@@ -269,9 +270,11 @@ reflects seeding activity and may read `"uploading (no peers)"` even when fully 
 | api_key | str | "" | TorBox bearer token |
 | download_dir | str | "" | Prompted on first download if empty |
 | poll_interval | int | 30 | Seconds; range 10–300 |
+| max_concurrent_downloads | int | 3 | Range 1–10; Download All queues excess items |
 | minimize_to_tray | bool | true | Hide vs quit on window close |
 | tray_notifications | bool | false | Tray popup on download complete |
 | columns | dict | all true | Per-column visibility flags |
+| window_geometry | str | "" | Hex-encoded QByteArray from saveGeometry() |
 
 Stored in `config.json` next to the exe (frozen) or next to the source files (dev).
 No registry, no AppData.
@@ -322,22 +325,35 @@ No registry, no AppData.
 
 ---
 
-## Known Gaps / Next Session
+## Download Concurrency
 
-- Download concurrency — all DownloadWorkers run in parallel up to QThreadPool's
-  default limit. A max-concurrent setting (default 2–3) would be more practical for
-  large Download All operations.
-- Right-click row context menu — Copy name, Copy link, Select files (multi-file
-  torrents), Open in browser (webdl).
-- Usenet hash names — investigate whether TorBox populates an alternative field
-  (`original_name`, `title`) that's more readable than the bare hex hash.
-- Polling pause when minimized with no active local downloads — check `isHidden()`
-  and `len(_downloading) == 0`; fall back to a longer interval (e.g. 5 min).
-- Log strip auto-clear — `_log_lines` grows unbounded; trim oldest 250 after ~500.
-- Window geometry persistence — save/restore via `saveGeometry()` / `restoreGeometry()`.
+`_downloading: dict[str, int]` tracks in-flight workers (key → count, >1 for multi-file
+torrents). `_download_queue: list[tuple[str, dict]]` is the FIFO pending queue.
+
+`_on_download_all()` starts up to `max_concurrent_downloads` items immediately and appends
+the rest to `_download_queue`. `_try_start_queued()` is called from `_on_download_finished`
+and `_on_download_error` to drain the queue as slots free up. Items are looked up fresh from
+`_row_items` at dequeue time so stale snapshots are never used.
+
+`_update_poll_interval()` checks `isHidden()` and `not _downloading`; if both are true it
+sets the timer to `max(poll_interval, IDLE_POLL_INTERVAL_SEC)` (300 s). Restores to
+`poll_interval` the moment a download starts or the window is shown.
+
+## Row Context Menu
+
+Right-click any row → `_on_row_context_menu()`. Dispatches a `LinkRequestWorker` for Copy
+Download Link and Open in Browser actions. Worker emits the URL on success; the slot then
+writes clipboard or calls `webbrowser.open()`. All three actions (Copy Name, Copy Link,
+Open in Browser) are shown/hidden based on item type and status.
+
+## Usenet Hash Names
+
+`_add_queue_row()` and `_update_queue_row()` both run `re.fullmatch(r'[0-9a-fA-F]{20,}',
+name)` on usenet items. Match → italic + COLOR_TEXT_MUTED + tooltip. No match (or name
+changes on a later poll) → bold + COLOR_TEXT + tooltip cleared.
 
 ---
 
 ## Version
 
-v0.4.0 — 2026-05-18
+v0.5.0 — 2026-05-18

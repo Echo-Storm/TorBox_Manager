@@ -2,6 +2,62 @@
 
 ---
 
+## v0.5.0 — 2026-05-18
+
+### Features
+- **Download concurrency limit** — new "Concurrent Downloads" setting (default 3, range 1–10).
+  Download All now starts up to the limit immediately and queues the rest in a FIFO queue.
+  Each time a local download finishes or errors, the next queued item starts automatically.
+- **Right-click context menu on rows** — right-click any queue row for: Copy Name (always),
+  Copy Download Link (Ready items — async request, copies the time-limited TorBox URL to
+  clipboard), Open in Browser (webdl Ready items). Link request runs on a background worker
+  so the UI never blocks.
+- **Retry button on error rows** — the Download button now reads "Retry" on rows where the
+  local download failed. Clicking it re-attempts the download immediately without needing a
+  poll cycle. Reverts to "Download" if TorBox reports the item ready again on the next poll.
+- **Polling pause when minimized** — when the window is hidden to the tray and no local
+  downloads are active, the poll interval drops to 5 minutes (configurable base interval is
+  still respected if it's already ≥ 5 min). Polling restores to the configured rate the
+  moment a download starts or the window is restored.
+- **Window geometry persistence** — position and size are saved to config.json on close and
+  restored on next launch. Falls back to maximized if no saved geometry exists.
+- **Usenet hash name handling** — NZB items whose names are bare hex hashes (≥ 20 hex chars)
+  now render in italic muted text with a tooltip: "NZB identifier — TorBox hasn't resolved
+  the filename yet". When TorBox provides a real name on a later poll, the cell re-styles
+  itself to the normal bold font automatically.
+- **Log strip auto-trim** — the in-app log buffer is capped at 500 lines. When it overflows,
+  the oldest 250 are dropped and the visible log view is rebuilt. Prevents unbounded memory
+  growth in long-running sessions.
+
+### Fixes
+- **Crash on multi-file torrent download** — `QDialog` was missing from the PyQt6 imports.
+  Any click on Download for a torrent with more than one file raised `NameError` at runtime.
+- **Progress bar stuck in pulse mode** — `_update_queue_row` called `pbar.setValue()` while
+  the bar was in indeterminate mode (range 0, 0), so Qt silently clipped the value and the
+  bar stayed pulsing even after TorBox reported real progress. Range is now reset to (0, 100)
+  before every value update.
+- **Error state left progress bar pulsing** — `_style_progress_bar` for STATUS_ERROR never
+  called `setRange(0, 100)`, so a bar that was pulsing when the error hit remained in
+  indeterminate mode. Now forces deterministic range and value 0 before applying the red style.
+- **Download queue used stale item data** — `_try_start_queued` passed the item snapshot
+  captured at queue time to `_start_download`. If the API data changed between queue and
+  dequeue, the download used old field values. Now looks up the item fresh from `_row_items`.
+- **Settings save bypassed idle-poll logic** — saving Settings set the poll timer interval
+  directly, ignoring the idle (window hidden + no downloads) slowdown. Now routes through
+  `_update_poll_interval()`.
+- **Clear All left download queue populated** — queued items lingered in `_download_queue`
+  after the table was cleared, causing silent no-ops on every subsequent download finish.
+- **Delete didn't prune download queue** — deleting an item while it was queued for download
+  left the entry in `_download_queue`. Now filters it out immediately on delete.
+- **Type badge showed wrong label** — the Type column badge used `source_type.capitalize()`
+  which rendered "Webdl" and "Usenet" instead of "Hoster Link" and "NZB". Now uses
+  `TYPE_LABELS` from constants for all four types.
+- **Frozen exe path fix** (v0.4 regression) — `tray_icon.png` is now bundled into the exe
+  via `--add-data` in build.yml and resolved via `sys._MEIPASS` at runtime. Previously the
+  icon was missing on all frozen builds that didn't have the assets folder next to the exe.
+
+---
+
 ## v0.4.0 — 2026-05-15
 
 ### Distribution

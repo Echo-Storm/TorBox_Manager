@@ -50,6 +50,7 @@ jobs:
             --windowed `
             --name TorBox_Manager `
             --icon assets/TorBox_Manager.ico `
+            --add-data "assets/tray_icon.png;assets" `
             --hidden-import PyQt6.QtWidgets `
             --hidden-import PyQt6.QtGui `
             --hidden-import PyQt6.QtCore `

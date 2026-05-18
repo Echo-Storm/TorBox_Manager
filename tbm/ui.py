@@ -21,10 +21,9 @@
 #   item["download_state"] — str, see _torbox_state_to_status() below
 #   item["files"]          — list of dicts (torrents only), each with "id", "name"
 #
-# TODO v0.2: add Seeders, Age/Added Time, ETA columns if exposed by TorBox API.
-#            Right-click header → Show/Hide Columns for optional fields.
-
 import os
+import re
+import sys
 from urllib.parse import unquote
 import webbrowser
 from datetime import datetime
@@ -33,6 +32,7 @@ from PyQt6.QtCore    import Qt, QThreadPool, QTimer
 from PyQt6.QtGui     import QAction, QBrush, QColor, QFont
 from PyQt6.QtWidgets import (
     QApplication,
+    QDialog,
     QFileDialog,
     QHBoxLayout,
     QLabel,
@@ -73,6 +73,8 @@ from constants import (
     COLOR_ROW_HOVER,
     COLOR_TEXT,
     COLOR_TEXT_MUTED,
+    DEFAULT_MAX_CONCURRENT_DL,
+    IDLE_POLL_INTERVAL_SEC,
     STATUS_COLORS,
     STATUS_DISPLAY,
     COL_ADDED,
@@ -103,9 +105,10 @@ from constants import (
     STATUS_QUEUED,
     STATUS_READY,
     TYPE_ICONS,
+    TYPE_LABELS,
 )
 from dialogs  import AboutDialog, AddLinkDialog, AddMagnetDialog, FilePickerDialog, SettingsDialog
-from worker   import AddWorker, DeleteWorker, DownloadWorker, PollWorker
+from worker   import AddWorker, DeleteWorker, DownloadWorker, LinkRequestWorker, PollWorker
 
 
 # ---------------------------------------------------------------------------
@@ -411,7 +414,7 @@ def _fmt_added(iso_str: str) -> str:
 
 def _make_badge(source_type: str) -> QLabel:
     """Return a styled QLabel badge for the Type column."""
-    label_text = TYPE_ICONS.get(source_type, "?") + "  " + source_type.capitalize()
+    label_text = TYPE_ICONS.get(source_type, "?") + "  " + TYPE_LABELS.get(source_type, source_type.capitalize())
     bg, fg     = BADGE_COLORS.get(source_type, ("#333333", "#e0e0e0"))
     badge      = QLabel(label_text)
     badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -453,6 +456,8 @@ class MainWindow(QMainWindow):
         self._row_items: dict[str, dict] = {}
         # Tracks which row_keys currently have a DownloadWorker running
         self._downloading: dict[str, int] = {}  # key -> number of active download workers
+        # Pending downloads waiting for a concurrency slot (FIFO)
+        self._download_queue: list[tuple[str, dict]] = []
         # Keys deleted by the user — suppressed for 2 poll cycles so they
         # don't reappear before TorBox finishes processing the delete.
         self._deleted_keys: set[str] = set()
@@ -475,9 +480,20 @@ class MainWindow(QMainWindow):
     def _build_ui(self):
         self.setWindowTitle(f"{APP_NAME} {APP_SUBTITLE}  •  v{APP_VERSION}")
         self.setMinimumSize(1000, 600)
-        self.resize(1200, 700)
-        self.setWindowState(Qt.WindowState.WindowMaximized)
         self.setStyleSheet(MAIN_STYLE)
+
+        # Restore saved geometry; fall back to maximized default
+        saved_geom = self.config.get("window_geometry", "")
+        if saved_geom:
+            try:
+                from PyQt6.QtCore import QByteArray
+                self.restoreGeometry(QByteArray.fromHex(saved_geom.encode()))
+            except Exception:
+                self.resize(1200, 700)
+                self.setWindowState(Qt.WindowState.WindowMaximized)
+        else:
+            self.resize(1200, 700)
+            self.setWindowState(Qt.WindowState.WindowMaximized)
 
         central = QWidget()
         self.setCentralWidget(central)
@@ -794,6 +810,10 @@ class MainWindow(QMainWindow):
         hdr.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         hdr.customContextMenuRequested.connect(self._on_header_context_menu)
 
+        # Right-click rows for context menu
+        self._table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self._table.customContextMenuRequested.connect(self._on_row_context_menu)
+
         # Apply saved column visibility from config
         self._apply_column_visibility()
 
@@ -869,6 +889,102 @@ class MainWindow(QMainWindow):
             self.config["columns"][config_key] = new_visible
             save_config(self.config)
             self._log(f"Column '{chosen.text()}' {'shown' if new_visible else 'hidden'} — saved.")
+
+    def _on_row_context_menu(self, pos):
+        """Right-click on a queue row — Copy name, Copy link, Open in browser."""
+        row = self._table.rowAt(pos.y())
+        if row < 0:
+            return
+        name_cell = self._table.item(row, COL_NAME)
+        if not name_cell:
+            return
+        key  = name_cell.data(Qt.ItemDataRole.UserRole)
+        item = self._row_items.get(key)
+        if not item:
+            return
+
+        name        = item.get("name", "")
+        source_type = item.get("source_type", "")
+        status      = _torbox_state_to_status(item)
+
+        menu = QMenu(self)
+        menu.setStyleSheet(f"""
+            QMenu {{
+                background-color: {COLOR_PANEL};
+                color: {COLOR_TEXT};
+                border: 1px solid {COLOR_BORDER};
+            }}
+            QMenu::item:selected {{
+                background-color: {COLOR_ACCENT};
+                color: #000000;
+            }}
+        """)
+
+        copy_name_action = QAction("Copy Name", self)
+        copy_name_action.triggered.connect(
+            lambda: QApplication.clipboard().setText(name)
+        )
+        menu.addAction(copy_name_action)
+
+        if status == STATUS_READY:
+            copy_link_action = QAction("Copy Download Link", self)
+            copy_link_action.triggered.connect(
+                lambda: self._request_link(item, action="copy")
+            )
+            menu.addAction(copy_link_action)
+
+            if source_type == "webdl":
+                open_action = QAction("Open in Browser", self)
+                open_action.triggered.connect(
+                    lambda: self._request_link(item, action="open")
+                )
+                menu.addAction(open_action)
+
+        menu.exec(self._table.viewport().mapToGlobal(pos))
+
+    def _request_link(self, item: dict, action: str):
+        """Dispatch a LinkRequestWorker; on success copy URL or open in browser."""
+        self._log(f"Requesting download link for {item.get('name', '?')}…")
+        worker = LinkRequestWorker(self.config.get("api_key", ""), item)
+        if action == "copy":
+            worker.signals.finished.connect(
+                lambda url: (
+                    QApplication.clipboard().setText(url),
+                    self._log(f"Link copied to clipboard.")
+                )
+            )
+        else:
+            worker.signals.finished.connect(
+                lambda url: (
+                    webbrowser.open(url),
+                    self._log(f"Opened in browser.")
+                )
+            )
+        worker.signals.error.connect(
+            lambda msg: self._log(f"Could not get link: {msg}", "ERROR")
+        )
+        self._pool.start(worker)
+
+    def _try_start_queued(self):
+        """Start pending downloads from the queue as concurrency slots free up."""
+        max_dl = self.config.get("max_concurrent_downloads", DEFAULT_MAX_CONCURRENT_DL)
+        while self._download_queue:
+            if sum(self._downloading.values()) >= max_dl:
+                break
+            key, _ = self._download_queue.pop(0)
+            item = self._row_items.get(key)
+            if not item:
+                continue
+            self._start_download(key, item)
+
+    def _update_poll_interval(self):
+        """Switch to idle (slow) poll when minimised with no active downloads."""
+        base = self.config.get("poll_interval", 30)
+        if self.isHidden() and not self._downloading:
+            interval = max(base, IDLE_POLL_INTERVAL_SEC)
+        else:
+            interval = base
+        self._poll_timer.setInterval(interval * 1000)
 
     def _build_log_strip(self) -> QWidget:
         """Monospace timestamped log at the bottom of the right panel."""
@@ -1060,7 +1176,7 @@ class MainWindow(QMainWindow):
 
         # Load icon — graceful fallback if asset is missing
         from PyQt6.QtGui import QIcon, QPixmap, QPainter, QColor, QBrush
-        icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+        icon_path = os.path.join(getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__))),
                                  "assets", "tray_icon.png")
         if os.path.isfile(icon_path):
             icon = QIcon(icon_path)
@@ -1206,18 +1322,33 @@ class MainWindow(QMainWindow):
         self._table.setRowCount(0)
         self._row_index.clear()
         self._row_items.clear()
+        self._download_queue.clear()
         self._log(f"Cleared all {count} row(s) from display.")
 
     def _on_download_all(self):
-        """Trigger a download for every Ready row that isn't already downloading."""
-        started = 0
+        """Queue every Ready row for download, respecting the concurrency limit."""
+        max_dl = self.config.get("max_concurrent_downloads", DEFAULT_MAX_CONCURRENT_DL)
+        queued_keys = {k for k, _ in self._download_queue}
+        started = queued = 0
         for key, item in self._row_items.items():
-            status = _torbox_state_to_status(item)
-            if status == STATUS_READY and key not in self._downloading:
+            if _torbox_state_to_status(item) != STATUS_READY:
+                continue
+            if key in self._downloading or key in queued_keys:
+                continue
+            active = sum(self._downloading.values())
+            if active < max_dl:
                 self._start_download(key, item)
                 started += 1
-        if started:
-            self._log(f"Started download for {started} ready item(s).")
+            else:
+                self._download_queue.append((key, item))
+                queued += 1
+        if started or queued:
+            parts = []
+            if started:
+                parts.append(f"started {started}")
+            if queued:
+                parts.append(f"queued {queued}")
+            self._log(f"Download All: {', '.join(parts)}.")
         else:
             self._log("No ready items to download.", "INFO")
 
@@ -1234,8 +1365,7 @@ class MainWindow(QMainWindow):
                 self._log("Settings saved.")
             else:
                 self._log("Settings updated in memory but could not save to disk.", "WARN")
-            # Restart the timer with the (possibly new) interval
-            self._poll_timer.setInterval(new_config.get("poll_interval", 30) * 1000)
+            self._update_poll_interval()
 
     def _on_about(self):
         AboutDialog(self).exec()
@@ -1315,10 +1445,22 @@ class MainWindow(QMainWindow):
         self._row_index[key] = row
 
         # Name — bold font, store row key for retrieval
-        name_cell = QTableWidgetItem(item.get("name", "Unknown"))
+        raw_name  = item.get("name", "Unknown")
+        name_cell = QTableWidgetItem(raw_name)
         name_cell.setData(Qt.ItemDataRole.UserRole, key)
-        bold_font = QFont(FONT_UI_FAMILY, FONT_UI_SIZE, QFont.Weight.Bold)
-        name_cell.setFont(bold_font)
+        # Usenet items sometimes arrive with a bare hex hash before TorBox resolves
+        # the real filename. Dim + italicise so users know it's a pending resolution,
+        # not missing metadata on our end.
+        if (item.get("source_type") == "usenet"
+                and re.fullmatch(r'[0-9a-fA-F]{20,}', raw_name)):
+            hash_font = QFont(FONT_UI_FAMILY, FONT_UI_SIZE)
+            hash_font.setItalic(True)
+            name_cell.setFont(hash_font)
+            name_cell.setForeground(QColor(COLOR_TEXT_MUTED))
+            name_cell.setToolTip("NZB identifier — TorBox hasn't resolved the filename yet")
+        else:
+            bold_font = QFont(FONT_UI_FAMILY, FONT_UI_SIZE, QFont.Weight.Bold)
+            name_cell.setFont(bold_font)
         self._table.setItem(row, COL_NAME, name_cell)
 
         # Type — colored badge widget
@@ -1421,6 +1563,25 @@ class MainWindow(QMainWindow):
         status      = _torbox_state_to_status(item)
         disp_status = _torbox_display_status(item)
 
+        # Update name cell — re-style if a previously hashed name got resolved
+        name_cell = self._table.item(row, COL_NAME)
+        if name_cell:
+            raw_name = item.get("name", "")
+            if name_cell.text() != raw_name:
+                name_cell.setText(raw_name)
+            is_hash = (item.get("source_type") == "usenet"
+                       and re.fullmatch(r'[0-9a-fA-F]{20,}', raw_name))
+            if is_hash:
+                hf = QFont(FONT_UI_FAMILY, FONT_UI_SIZE)
+                hf.setItalic(True)
+                name_cell.setFont(hf)
+                name_cell.setForeground(QColor(COLOR_TEXT_MUTED))
+                name_cell.setToolTip("NZB identifier — TorBox hasn't resolved the filename yet")
+            else:
+                name_cell.setFont(QFont(FONT_UI_FAMILY, FONT_UI_SIZE, QFont.Weight.Bold))
+                name_cell.setForeground(QColor(COLOR_TEXT))
+                name_cell.setToolTip("")
+
         # Update status cell with compound display text and color
         status_cell = self._table.item(row, COL_STATUS)
         if status_cell:
@@ -1436,13 +1597,24 @@ class MainWindow(QMainWindow):
         if key not in self._downloading:
             pbar = self._table.cellWidget(row, COL_PROGRESS)
             if isinstance(pbar, QProgressBar):
+                # Reset to determinate range first so setValue() isn't silently
+                # clipped when the bar was previously in pulse mode (range 0,0).
+                pbar.setRange(0, 100)
                 pbar.setValue(_parse_progress(item))
                 self._style_progress_bar(pbar, status)
 
-        # Enable/disable download button
+        # Enable/disable download button; show Retry on error rows
         dl_btn = self._table.cellWidget(row, COL_DOWNLOAD)
-        if isinstance(dl_btn, QPushButton):
-            dl_btn.setEnabled(status == STATUS_READY and key not in self._downloading)
+        if isinstance(dl_btn, QPushButton) and key not in self._downloading:
+            if status == STATUS_ERROR:
+                dl_btn.setText("Retry")
+                dl_btn.setEnabled(True)
+            elif status == STATUS_READY:
+                if dl_btn.text() == "Retry":
+                    dl_btn.setText("Download")
+                dl_btn.setEnabled(True)
+            else:
+                dl_btn.setEnabled(False)
 
         # Refresh optional columns
         self._set_optional_cells(row, item)
@@ -1494,6 +1666,8 @@ class MainWindow(QMainWindow):
             pbar.setValue(100)
             pbar.setStyleSheet(_PROGRESS_BAR_DONE_STYLE)
         elif status == STATUS_ERROR:
+            pbar.setRange(0, 100)
+            pbar.setValue(0)
             pbar.setFormat("Error")
             pbar.setStyleSheet(
                 "QProgressBar { background-color: #2e1a1a; border: 1px solid #8b3030; "
@@ -1671,6 +1845,8 @@ class MainWindow(QMainWindow):
             self._downloading[key] = count
         else:
             self._downloading.pop(key, None)
+        self._try_start_queued()
+        self._update_poll_interval()
 
         fname = unquote(os.path.basename(file_path))
         clean_path = unquote(file_path)
@@ -1719,6 +1895,8 @@ class MainWindow(QMainWindow):
             self._downloading[key] = count
         else:
             self._downloading.pop(key, None)
+        self._try_start_queued()
+        self._update_poll_interval()
         self._log(f"Download error: {msg}", "ERROR")
         self._set_status(f"Download failed — {msg}")
 
@@ -1732,7 +1910,8 @@ class MainWindow(QMainWindow):
             self._style_progress_bar(pbar, STATUS_ERROR)
         dl_btn = self._table.cellWidget(row, COL_DOWNLOAD)
         if isinstance(dl_btn, QPushButton):
-            dl_btn.setEnabled(True)   # let them retry
+            dl_btn.setText("Retry")
+            dl_btn.setEnabled(True)
 
     @staticmethod
     def _open_in_explorer(file_path: str):
@@ -1792,6 +1971,7 @@ class MainWindow(QMainWindow):
         # the next poll will bring it back. This is the least-surprising behaviour.
         self._deleted_keys.add(key)
         self._remove_row(key)
+        self._download_queue = [(k, i) for k, i in self._download_queue if k != key]
         self._log(f"Deleting from TorBox: {name}")
 
         worker = DeleteWorker(delete_fn, key, name)
@@ -1815,14 +1995,21 @@ class MainWindow(QMainWindow):
     def _log(self, msg: str, level: str = "INFO"):
         ts   = datetime.now().strftime("%H:%M:%S")
         line = f"{ts} [{level}] {msg}"
-        # Store every line so the filter toggle can re-render without data loss
         self._log_lines.append((level, line))
-        # Only append to the visible view if the filter allows this level
-        filter_active = getattr(self, "_log_filter_btn", None) and self._log_filter_btn.isChecked()
-        if not filter_active or level in ("WARN", "ERROR"):
-            self._log_view.append(line)
-            sb = self._log_view.verticalScrollBar()
-            sb.setValue(sb.maximum())
+        # Trim oldest entries when the buffer grows too large
+        if len(self._log_lines) > 500:
+            self._log_lines = self._log_lines[-250:]
+            self._log_view.clear()
+            filter_active = getattr(self, "_log_filter_btn", None) and self._log_filter_btn.isChecked()
+            for lvl, ln in self._log_lines:
+                if not filter_active or lvl in ("WARN", "ERROR"):
+                    self._log_view.append(ln)
+        else:
+            filter_active = getattr(self, "_log_filter_btn", None) and self._log_filter_btn.isChecked()
+            if not filter_active or level in ("WARN", "ERROR"):
+                self._log_view.append(line)
+        sb = self._log_view.verticalScrollBar()
+        sb.setValue(sb.maximum())
 
     def _set_status(self, msg: str):
         self._status_label.setText(msg)
@@ -1846,9 +2033,11 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event):
         """Minimize to tray or quit depending on user setting."""
+        self._save_geometry()
         if self.config.get("minimize_to_tray", True):
             event.ignore()
             self.hide()
+            self._update_poll_interval()
             self._tray.showMessage(
                 APP_NAME,
                 "Running in the system tray.",
@@ -1858,6 +2047,14 @@ class MainWindow(QMainWindow):
         else:
             self._tray_quit()
 
+    def _save_geometry(self):
+        try:
+            geom_hex = self.saveGeometry().toHex().data().decode()
+            self.config["window_geometry"] = geom_hex
+            save_config(self.config)
+        except Exception:
+            pass
+
     def _on_tray_activated(self, reason):
         if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
             self._tray_show()
@@ -1866,6 +2063,7 @@ class MainWindow(QMainWindow):
         self.showNormal()
         self.raise_()
         self.activateWindow()
+        self._update_poll_interval()
 
     def _tray_restart(self):
         import sys

@@ -28,7 +28,10 @@ def _setup_logging() -> logging.Logger:
 
     Returns the logger so main() can write its own startup entry.
     """
-    log_dir  = os.path.dirname(os.path.abspath(__file__))
+    if getattr(sys, 'frozen', False):
+        log_dir = os.path.dirname(sys.executable)
+    else:
+        log_dir = os.path.dirname(os.path.abspath(__file__))
     log_path = os.path.join(log_dir, "TorBox_Manager_Log.txt")
 
     fmt     = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s",
@@ -81,7 +84,8 @@ def main():
     _install_excepthook(logger)
 
     from constants import APP_NAME, APP_SUBTITLE, APP_VERSION
-    logger.info(f"Logging initialized: {os.path.join(os.path.dirname(os.path.abspath(__file__)), 'TorBox_Manager_Log.txt')}")
+    _app_dir = os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else os.path.dirname(os.path.abspath(__file__))
+    logger.info(f"Logging initialized: {os.path.join(_app_dir, 'TorBox_Manager_Log.txt')}")
     logger.info(f"{APP_NAME} {APP_SUBTITLE} v{APP_VERSION} starting")
 
     # Qt must be imported after logging is set up so any import errors are logged
@@ -98,8 +102,8 @@ def main():
     # is not valid in PyQt6 and will raise an AttributeError if used.
 
     # App icon (window + taskbar) — same asset as tray icon if present
-    icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                             "assets", "tray_icon.png")
+    _asset_base = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
+    icon_path = os.path.join(_asset_base, "assets", "tray_icon.png")
     if os.path.isfile(icon_path):
         app.setWindowIcon(QIcon(icon_path))
 
