@@ -445,7 +445,7 @@ class LinkRequestWorker(QRunnable):
             self.signals.error.emit(f"Unknown source type: {source_type}")
             return
 
-        if result.get("ok"):
+        if result.get("success"):
             url = result.get("data", "")
             if url:
                 self.signals.finished.emit(url)

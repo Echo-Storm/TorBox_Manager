@@ -1977,6 +1977,14 @@ class MainWindow(QMainWindow):
             self._style_progress_bar(pbar, STATUS_ERROR)
         dl_btn = self._table.cellWidget(row, COL_DOWNLOAD)
         if isinstance(dl_btn, QPushButton):
+            # Disconnect whatever the button was wired to (may be _open_in_explorer
+            # if this row had a previous successful download) and ensure Retry always
+            # calls _on_download_clicked so the user can re-attempt normally.
+            try:
+                dl_btn.clicked.disconnect()
+            except RuntimeError:
+                pass
+            dl_btn.clicked.connect(lambda checked, k=key: self._on_download_clicked(k))
             dl_btn.setText("Retry")
             dl_btn.setEnabled(True)
 
@@ -2133,11 +2141,15 @@ class MainWindow(QMainWindow):
         self._update_poll_interval()
 
     def _tray_restart(self):
-        import sys
+        import subprocess
         self._poll_timer.stop()
         QApplication.instance().quit()
-        import subprocess
-        subprocess.Popen([sys.executable] + sys.argv)
+        # In a frozen PyInstaller exe sys.executable IS the exe, so sys.argv[0]
+        # would duplicate it as an argument.  In source mode we need both.
+        if getattr(sys, "frozen", False):
+            subprocess.Popen([sys.executable])
+        else:
+            subprocess.Popen([sys.executable] + sys.argv)
 
     def _tray_quit(self):
         self._poll_timer.stop()

@@ -79,8 +79,17 @@ def load_config() -> dict:
 
     # Fill in any keys that exist in DEFAULTS but not in the saved file.
     # This handles the case where a new setting is added in a later version.
+    # Nested dicts (e.g. "columns") are deep-merged so new keys added in a
+    # later version aren't silently dropped when the user has an older config.
     merged = dict(DEFAULTS)
-    merged.update(data)
+    for key, value in data.items():
+        if key in merged and isinstance(merged[key], dict) and isinstance(value, dict):
+            # Deep-merge: start from defaults, overlay saved values
+            sub = dict(merged[key])
+            sub.update(value)
+            merged[key] = sub
+        else:
+            merged[key] = value
     return merged
 
 
