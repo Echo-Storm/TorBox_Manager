@@ -93,7 +93,6 @@ from constants import (
     COL_HEADERS,
     COL_VISIBILITY_DEFAULTS,
     COL_VISIBILITY_KEYS,
-    DOWNLOAD_CHUNK_SIZE,
     FONT_LOG_FAMILY,
     FONT_LOG_SIZE,
     FONT_UI_FAMILY,
@@ -1660,6 +1659,14 @@ class MainWindow(QMainWindow):
         dl_btn = self._table.cellWidget(row, COL_DOWNLOAD)
         if isinstance(dl_btn, QPushButton) and key not in self._downloading:
             if status == STATUS_ERROR:
+                # Always disconnect before setting Retry — the button may have
+                # been "Open" (wired to _open_in_explorer) if this row had a
+                # prior successful local download before TorBox-side error.
+                try:
+                    dl_btn.clicked.disconnect()
+                except RuntimeError:
+                    pass
+                dl_btn.clicked.connect(lambda checked, k=key: self._on_download_clicked(k))
                 dl_btn.setText("Retry")
                 dl_btn.setEnabled(True)
             elif status == STATUS_READY:

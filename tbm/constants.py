@@ -9,7 +9,7 @@
 
 APP_NAME        = "TorBox Manager"
 APP_SUBTITLE    = "EchoStorm Edition"
-APP_VERSION     = "0.5.0"
+APP_VERSION     = "0.6.0"
 LOG_FILENAME    = "TorBox_Manager_Log.txt"
 CONFIG_FILENAME = "config.json"
 

@@ -49,6 +49,8 @@ When the app opens it'll ask for your **API key** and a **download folder**. Fil
 - **Downloads to your folder** — streams directly to wherever you set, with a live progress bar per file
 - **Controlled downloads** — concurrency limit keeps your connection usable; Download All queues everything and feeds the next item as each slot frees up
 - **Right-click rows** — Copy Name, Copy Download Link, Open in Browser (hoster links) — right on the row
+- **Multi-link hoster input** — paste multiple hoster URLs at once, one per line; each gets its own background worker
+- **Update notifications** — checks GitHub Releases on startup; a button appears in the status bar if a newer version is out
 - **Stays out of your way** — minimizes to the system tray, slows its polling to 5-minute intervals when idle so it's not hammering the API all night
 - **Tray notifications** — optional popup when a download finishes (off by default, toggle in Settings)
 - **Remembers where you left it** — window position and size restored on every launch
@@ -89,6 +91,8 @@ Clone the repo, install Python 3.10+, and run `launch.bat`. See the `tbm/` folde
 ---
 
 ## Version history
+
+**v0.6.0** — Multi-link hoster input, update notifications, 5 bug fixes (right-click link always failed, multi-file torrent button stuck as Open, Retry wired to wrong handler, frozen Restart crash, config upgrade dropped column keys)
 
 **v0.5.0** — Concurrency limit, right-click row menu, Retry button, polling pause when idle, window geometry persistence, usenet hash dimming, log auto-trim, 7 bug fixes
 

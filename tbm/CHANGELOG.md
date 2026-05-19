@@ -2,6 +2,42 @@
 
 ---
 
+## v0.6.0 — 2026-05-19
+
+### Features
+- **Multi-link hoster support** — Add Hoster Link dialog now accepts multiple URLs at once,
+  one per line. Paste a batch, hit OK, and each URL gets its own background worker. Previously
+  limited to one URL per dialog open.
+- **Update notifications** — the app silently checks GitHub Releases on startup and shows a
+  small "⬆ v0.x.x available" button in the status bar if a newer version is out. Clicking it
+  opens the releases page in the browser. No data is written to disk; the check runs fresh
+  each launch and errors are logged only, never surfaced to the user.
+
+### Fixes
+- **Right-click Copy Link / Open in Browser always failed** — `LinkRequestWorker` checked
+  `result.get("ok")` but `api.py` returns `{"success": ..., "detail": ..., "data": ...}`.
+  No `"ok"` key exists, so the worker always emitted the error signal even on success.
+  Fixed: check `result.get("success")`.
+- **Multi-file torrent Download button stuck as "Open"** — after downloading one file from a
+  multi-file torrent the Download button permanently rewired to "Open", blocking further file
+  selections from the same row until restart. Now stays as "Download" so the file picker
+  remains accessible for remaining files.
+- **Retry button wired to wrong handler after prior success** — `_on_download_error` enabled
+  the Retry button without disconnecting it first. If the row had a previously successful
+  download (button wired to `_open_in_explorer`), clicking Retry opened Explorer instead of
+  retrying. Fixed: disconnect + reconnect to `_on_download_clicked` in both the error handler
+  and the poll-update path.
+- **Tray → Restart duplicated exe path as argument** — `subprocess.Popen([sys.executable] +
+  sys.argv)` in a frozen exe passes the exe path twice (once as the exe, once as argv[0]),
+  causing an invalid invocation. Fixed: frozen mode uses `[sys.executable]` only; source mode
+  keeps both.
+- **Config upgrade silently dropped new column keys** — `load_config` used a shallow
+  `merged.update(data)` which replaced the entire `columns` sub-dict with whatever was saved,
+  discarding any new column keys added in later versions. Fixed: nested dicts are deep-merged
+  (defaults first, saved values overlay).
+
+---
+
 ## v0.5.0 — 2026-05-18
 
 ### Features
