@@ -410,6 +410,12 @@ class LinkRequestSignals(QObject):
     error    = pyqtSignal(str)   # human-readable error
 
 
+class UpdateCheckSignals(QObject):
+    update_available = pyqtSignal(str, str)  # (latest_version, release_url)
+    up_to_date       = pyqtSignal()
+    error            = pyqtSignal(str)       # human-readable reason
+
+
 class LinkRequestWorker(QRunnable):
     """Fetch a time-limited TorBox download link for a single item/file."""
 
@@ -447,3 +453,29 @@ class LinkRequestWorker(QRunnable):
                 self.signals.error.emit("No URL in response")
         else:
             self.signals.error.emit(result.get("detail", "Failed to get link"))
+
+
+class UpdateCheckWorker(QRunnable):
+    """
+    One-shot worker that checks GitHub Releases for a newer version.
+
+    Emits update_available(latest, url) if a newer version exists,
+    up_to_date() if already current, or error(reason) on failure.
+    Runs silently — errors are logged but never surfaced to the user.
+    """
+
+    def __init__(self, current_version: str):
+        super().__init__()
+        self.signals          = UpdateCheckSignals()
+        self._current_version = current_version
+
+    def run(self):
+        result = api.check_for_update(self._current_version)
+        if not result.get("success"):
+            self.signals.error.emit(result.get("detail", "Update check failed"))
+            return
+        data = result.get("data")
+        if data:
+            self.signals.update_available.emit(data["latest"], data["url"])
+        else:
+            self.signals.up_to_date.emit()

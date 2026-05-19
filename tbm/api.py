@@ -354,6 +354,52 @@ def delete_usenet(api_key: str, usenet_id: int) -> dict:
     )
 
 # ---------------------------------------------------------------------------
+# Update check
+# ---------------------------------------------------------------------------
+
+def check_for_update(current_version: str) -> dict:
+    """
+    Query the GitHub Releases API for the latest release tag.
+
+    Returns the standard dict shape:
+        success  True  → data = {"latest": "0.6.0", "url": "...releases/tag/v0.6.0"}
+                         or data = None when already on the latest version
+        success  False → detail contains the reason (network error, parse fail, etc.)
+    """
+    from constants import GITHUB_API_LATEST_URL
+
+    def _parse_ver(v: str) -> tuple:
+        """Turn '0.5.0' or 'v0.5.0' into (0, 5, 0) for safe comparison."""
+        v = v.lstrip("v").strip()
+        try:
+            return tuple(int(x) for x in v.split("."))
+        except ValueError:
+            return (0,)
+
+    try:
+        resp = requests.get(
+            GITHUB_API_LATEST_URL,
+            headers={"User-Agent": f"TorBoxManager/{current_version}"},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        tag = data.get("tag_name", "")
+        html_url = data.get("html_url", "")
+        if not tag:
+            return _err("No tag_name in GitHub response")
+        latest = tag.lstrip("v").strip()
+        if _parse_ver(latest) > _parse_ver(current_version):
+            return _ok({"latest": latest, "url": html_url})
+        # Already on latest
+        return _ok(None)
+    except requests.RequestException as exc:
+        return _err(f"Update check failed: {exc}")
+    except Exception as exc:
+        return _err(f"Update check error: {exc}")
+
+
+# ---------------------------------------------------------------------------
 # Debug helper — first-run field name verification
 # ---------------------------------------------------------------------------
 

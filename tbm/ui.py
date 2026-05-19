@@ -98,6 +98,7 @@ from constants import (
     FONT_LOG_SIZE,
     FONT_UI_FAMILY,
     FONT_UI_SIZE,
+    GITHUB_RELEASES_URL,
     KOFI_URL,
     STATUS_DOWNLOADING,
     STATUS_ERROR,
@@ -108,7 +109,7 @@ from constants import (
     TYPE_LABELS,
 )
 from dialogs  import AboutDialog, AddLinkDialog, AddMagnetDialog, FilePickerDialog, SettingsDialog
-from worker   import AddWorker, DeleteWorker, DownloadWorker, LinkRequestWorker, PollWorker
+from worker   import AddWorker, DeleteWorker, DownloadWorker, LinkRequestWorker, PollWorker, UpdateCheckWorker
 
 
 # ---------------------------------------------------------------------------
@@ -1113,6 +1114,28 @@ class MainWindow(QMainWindow):
         )
         bar_layout.addWidget(self._status_label, stretch=1)
 
+        # Update available button — hidden until an update is detected
+        self._update_btn = QPushButton("⬆  Update available")
+        self._update_btn.setFixedHeight(22)
+        self._update_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {COLOR_ACCENT_DIM};
+                color: #ffffff;
+                border: none;
+                border-radius: 3px;
+                font-size: 8pt;
+                padding: 0 8px;
+            }}
+            QPushButton:hover {{
+                background-color: {COLOR_ACCENT};
+                color: #000000;
+            }}
+        """)
+        self._update_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._update_btn.hide()
+        bar_layout.addWidget(self._update_btn)
+        bar_layout.addSpacing(6)
+
         # Download All — outline at rest, fills green on hover
         dl_all_btn = QPushButton("⬇  Download All")
         dl_all_btn.setFixedHeight(22)
@@ -1236,6 +1259,8 @@ class MainWindow(QMainWindow):
         # Also do an immediate poll on startup if we have a key
         if is_configured(self.config):
             QTimer.singleShot(500, self._submit_poll)
+        # Check for updates a few seconds after startup — silent, background only
+        QTimer.singleShot(3000, self._check_for_update)
 
     # -----------------------------------------------------------------------
     # Add button slots
@@ -1373,6 +1398,30 @@ class MainWindow(QMainWindow):
 
     def _on_about(self):
         AboutDialog(self).exec()
+
+    # -----------------------------------------------------------------------
+    # Update check
+    # -----------------------------------------------------------------------
+
+    def _check_for_update(self):
+        """Dispatch an UpdateCheckWorker. Runs silently; errors are logged only."""
+        worker = UpdateCheckWorker(APP_VERSION)
+        worker.signals.update_available.connect(self._on_update_available)
+        worker.signals.error.connect(
+            lambda msg: self._log(f"Update check: {msg}", "WARN")
+        )
+        self._pool.start(worker)
+
+    def _on_update_available(self, latest: str, url: str):
+        self._log(f"Update available: v{latest} — {url}")
+        self._update_btn.setText(f"⬆  v{latest} available")
+        self._update_btn.setToolTip(f"Version {latest} is available on GitHub. Click to open the releases page.")
+        try:
+            self._update_btn.clicked.disconnect()
+        except RuntimeError:
+            pass
+        self._update_btn.clicked.connect(lambda: webbrowser.open(url))
+        self._update_btn.show()
 
     # -----------------------------------------------------------------------
     # Polling

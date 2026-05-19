@@ -202,3 +202,6 @@ FONT_LOG_SIZE   = 8            # pt — log strip
 
 KOFI_URL     = "https://ko-fi.com/xechostormx"
 REFERRAL_URL = "https://torbox.app/subscription?referral=bd158452-a00c-4bce-be2a-593351ccaec7"
+
+GITHUB_RELEASES_URL     = "https://github.com/Echo-Storm/TorBox_Manager/releases/latest"
+GITHUB_API_LATEST_URL   = "https://api.github.com/repos/Echo-Storm/TorBox_Manager/releases/latest"
