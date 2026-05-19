@@ -38,6 +38,7 @@ from PyQt6.QtWidgets import (
     QTableWidget,
     QTableWidgetItem,
     QTextBrowser,
+    QTextEdit,
     QVBoxLayout,
 )
 
@@ -332,18 +333,20 @@ class AddMagnetDialog(QDialog):
 
 class AddLinkDialog(QDialog):
     """
-    Single-field dialog for pasting a hoster URL.
+    Multi-line dialog for pasting one or more hoster URLs (one per line).
 
     Usage:
         dlg = AddLinkDialog(parent)
         if dlg.exec() == QDialog.DialogCode.Accepted:
-            url = dlg.url()
+            for url in dlg.urls():
+                ...
     """
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Add Hoster Link")
         self.setMinimumWidth(520)
+        self.setMinimumHeight(220)
         self.setModal(True)
         _apply_dialog_style(self)
         self._build_ui()
@@ -353,20 +356,57 @@ class AddLinkDialog(QDialog):
         layout.setSpacing(10)
         layout.setContentsMargins(16, 16, 16, 16)
 
-        layout.addWidget(_section_label("Hoster URL"))
+        layout.addWidget(_section_label("Hoster URLs"))
 
-        input_row = QHBoxLayout()
-        input_row.setSpacing(6)
-        self._input = QLineEdit()
-        self._input.setPlaceholderText("https://1fichier.com/?abc123  or  https://mega.nz/...")
-        self._input.setMinimumHeight(30)
-        input_row.addWidget(self._input)
-        input_row.addWidget(_make_paste_btn(self._input))
-        layout.addLayout(input_row)
+        # Paste button wired to the QTextEdit
+        paste_row = QHBoxLayout()
+        paste_row.setSpacing(6)
+        paste_row.addStretch()
+        self._paste_btn = QPushButton("📋 Paste")
+        self._paste_btn.setFixedHeight(26)
+        self._paste_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {COLOR_ACCENT};
+                color: #ffffff;
+                border: none;
+                border-radius: 4px;
+                padding: 0 10px;
+                font-size: 8pt;
+            }}
+            QPushButton:hover {{ background-color: {COLOR_ACCENT_DIM}; }}
+            QPushButton:disabled {{
+                background-color: {COLOR_BORDER};
+                color: {COLOR_TEXT_MUTED};
+            }}
+        """)
+        self._paste_btn.clicked.connect(self._paste_clipboard)
+        paste_row.addWidget(self._paste_btn)
+        layout.addLayout(paste_row)
+
+        self._input = QTextEdit()
+        self._input.setPlaceholderText(
+            "https://1fichier.com/?abc123\n"
+            "https://mega.nz/...\n"
+            "https://pixeldrain.com/..."
+        )
+        self._input.setMinimumHeight(90)
+        self._input.setMaximumHeight(160)
+        self._input.setStyleSheet(f"""
+            QTextEdit {{
+                background-color: {COLOR_BG};
+                color: {COLOR_TEXT};
+                border: 1px solid {COLOR_BORDER_BRIGHT};
+                border-radius: 4px;
+                padding: 4px;
+                font-family: Consolas, monospace;
+                font-size: 8pt;
+            }}
+        """)
+        layout.addWidget(self._input)
 
         layout.addWidget(_muted_label(
-            "Paste a link from any supported hoster (1Fichier, Mega, Pixeldrain, etc.). "
-            "TorBox will cache it. If the hoster isn't supported, TorBox will say so."
+            "One URL per line. Supported hosters: 1Fichier, Mega, Pixeldrain, and others. "
+            "TorBox will cache each one. Unsupported hosters will be reported per-link."
         ))
 
         self._error_label = QLabel("")
@@ -380,21 +420,48 @@ class AddLinkDialog(QDialog):
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
 
-        self._input.returnPressed.connect(self._validate_and_accept)
+        # Update clipboard button state whenever clipboard changes
+        QApplication.clipboard().dataChanged.connect(self._update_paste_btn)
+        self._update_paste_btn()
+
+    def _update_paste_btn(self):
+        has_text = bool(QApplication.clipboard().text().strip())
+        self._paste_btn.setEnabled(has_text)
+
+    def _paste_clipboard(self):
+        text = QApplication.clipboard().text().strip()
+        if not text:
+            return
+        current = self._input.toPlainText().strip()
+        if current:
+            self._input.setPlainText(current + "\n" + text)
+        else:
+            self._input.setPlainText(text)
+        # Move cursor to end
+        cursor = self._input.textCursor()
+        cursor.movePosition(cursor.MoveOperation.End)
+        self._input.setTextCursor(cursor)
 
     def _validate_and_accept(self):
-        text = self._input.text().strip()
-        if not text:
-            self._error_label.setText("Please paste a URL.")
+        urls = self.urls()
+        if not urls:
+            self._error_label.setText("Please paste at least one URL.")
             return
-        if not (text.startswith("http://") or text.startswith("https://")):
-            self._error_label.setText("URL should start with http:// or https://")
+        bad = [u for u in urls if not (u.startswith("http://") or u.startswith("https://"))]
+        if bad:
+            self._error_label.setText(
+                f"Not a valid URL: {bad[0][:60]}{'...' if len(bad[0]) > 60 else ''}"
+            )
             return
         self.accept()
 
-    def url(self) -> str:
-        """Return the validated URL. Call only after exec() == Accepted."""
-        return self._input.text().strip()
+    def urls(self) -> list[str]:
+        """Return the validated URLs. Call only after exec() == Accepted."""
+        return [
+            line.strip()
+            for line in self._input.toPlainText().splitlines()
+            if line.strip()
+        ]
 
 
 # ---------------------------------------------------------------------------

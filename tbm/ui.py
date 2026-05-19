@@ -1262,10 +1262,14 @@ class MainWindow(QMainWindow):
     def _on_add_link(self):
         dlg = AddLinkDialog(self)
         if dlg.exec():
-            url     = dlg.url()
             api_key = self.config.get("api_key", "")
-            self._log(f"Adding hoster link: {url[:60]}{'...' if len(url) > 60 else ''}")
-            self._submit_add(lambda: api.add_hoster_link(api_key, url), "hoster link")
+            urls = dlg.urls()
+            for url in urls:
+                self._log(f"Adding hoster link: {url[:60]}{'...' if len(url) > 60 else ''}")
+                self._submit_add(
+                    (lambda u: lambda: api.add_hoster_link(api_key, u))(url),
+                    "hoster link"
+                )
 
     def _on_add_nzb(self):
         path, _ = QFileDialog.getOpenFileName(
@@ -1878,16 +1882,30 @@ class MainWindow(QMainWindow):
 
         dl_btn = self._table.cellWidget(row, COL_DOWNLOAD)
         if isinstance(dl_btn, QPushButton):
-            dl_btn.setText("Open")
             dl_btn.setEnabled(True)
-            # Rewire the button to open the file's containing folder
             try:
                 dl_btn.clicked.disconnect()
             except RuntimeError:
                 pass
-            dl_btn.clicked.connect(
-                lambda checked, p=file_path: self._open_in_explorer(p)
+
+            # Multi-file torrents: keep the button as "Download" so the user
+            # can open the file picker again to grab remaining files.
+            item = self._row_items.get(key, {})
+            is_multi_file_torrent = (
+                item.get("source_type", "") in ("torrent", "magnet")
+                and len(item.get("files", [])) > 1
             )
+            if is_multi_file_torrent:
+                dl_btn.setText("Download")
+                dl_btn.clicked.connect(
+                    lambda checked, k=key: self._on_download_clicked(k)
+                )
+            else:
+                dl_btn.setText("Open")
+                # Rewire the button to open the file's containing folder
+                dl_btn.clicked.connect(
+                    lambda checked, p=file_path: self._open_in_explorer(p)
+                )
 
     def _on_download_error(self, key: str, msg: str):
         count = self._downloading.get(key, 1) - 1
