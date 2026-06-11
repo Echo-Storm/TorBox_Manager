@@ -10,7 +10,7 @@ Built for people coming from Real-Debrid who want that same familiar desktop wor
 
 ## What it looks like
 
-The screenshot above is a real session from v0.3. Eight items in the queue — torrents, a magnet, a hoster link, and an NZB — all managed from one window. The MAME set is actively downloading at 6%. Everything else is cached and ready to grab.
+The screenshot above shows the queue in action — torrents, a magnet, a hoster link, and an NZB all managed from one window. The MAME set is actively downloading. Everything else is cached and ready to grab. (Screenshot is from an earlier build; the UI has grown since then.)
 
 ---
 
@@ -44,18 +44,19 @@ When the app opens it'll ask for your **API key** and a **download folder**. Fil
 ## What it does
 
 - **Add anything** — magnet links, .torrent files, hoster URLs (1Fichier, Mega, Pixeldrain etc.), and .nzb files
-- **Unified queue** — everything in one table regardless of type, with status, size, seeds, peers, progress
-- **Queue filter** — type in the search bar above the table to filter by name; updates live as the queue polls
-- **Multi-file torrents** — picks which files you want before downloading, so you're not stuck grabbing the whole set
-- **Downloads to your folder** — streams directly to wherever you set, with a live progress bar per file; each item gets its own subfolder automatically
-- **Auto-extract** — archives (.zip, .rar, .7z, .tar.*) are extracted automatically after download, on a background thread so the UI stays responsive
-- **Watch folder** — drop .torrent or .nzb files into a folder and they get submitted to TorBox automatically
-- **Controlled downloads** — concurrency limit keeps your connection usable; Download All queues everything and feeds the next item as each slot frees up
+- **Unified queue** — everything in one table regardless of type, with live status, size, seeds, peers, ETA, and progress bars
+- **Queue filter** — search bar above the table filters rows by name in real time; stays active across poll cycles
+- **Multi-file torrents** — pick exactly which files you want before downloading; one worker per file, all in parallel
+- **Downloads to your folder** — streams directly to disk with a live progress bar; each item gets its own named subfolder automatically
+- **Auto-extract** — archives (.zip, .rar, .7z, .tar.*) are extracted on a background thread immediately after download; optionally deletes the archive after extraction
+- **Watch folder** — drop .torrent or .nzb files into a folder and they get submitted to TorBox automatically, with a delete-after-submit option
+- **Download history** — every completed download is logged; the History tab shows them all newest-first with double-click to open in Explorer and right-click to copy the path
+- **Controlled downloads** — concurrency limit (default 3) keeps your connection usable; Download All queues the rest and drains the queue as slots free up
 - **Right-click rows** — Copy Name, Copy Download Link, Open in Browser (hoster links) — right on the row
-- **Multi-link hoster input** — paste multiple hoster URLs at once, one per line; each gets its own background worker
-- **Update notifications** — checks GitHub Releases on startup; a button appears in the status bar if a newer version is out
-- **Stays out of your way** — minimizes to the system tray, slows its polling to 5-minute intervals when idle so it's not hammering the API all night
-- **Tray notifications** — optional popup when a download finishes (off by default, toggle in Settings)
+- **Multi-link hoster input** — paste a batch of hoster URLs at once, one per line
+- **Update notifications** — checks GitHub Releases silently on startup; a button appears in the status bar if a newer version is out
+- **Stays out of your way** — minimizes to the system tray, slows polling to 5-minute intervals when idle
+- **Tray notifications** — optional popup when a download finishes (off by default)
 - **Remembers where you left it** — window position and size restored on every launch
 
 ---
@@ -89,13 +90,19 @@ Config saves to `config.json` next to the exe. Nothing goes to the registry or A
 That's normal for freshly built executables — Defender scans them on first launch. If it hard-blocks it: right-click the exe → Properties → Unblock. This is a false positive; the exe bundles Python and PyQt6 and nothing else.
 
 **My item shows a hash instead of a name (like `694f6fe710f5...`)**
-That's a TorBox thing on some usenet items — it returns the internal hash before it resolves the real name. The app now renders those in italic/dimmed text so you know it's a pending resolution, not a bug. The download still works fine, and the name updates on the next poll once TorBox sorts it out.
+That's a TorBox thing on some usenet items — it returns the internal hash before it resolves the real name. The app renders those in italic/dimmed text so you know it's a pending resolution, not a bug. The download still works fine, and the name updates on the next poll once TorBox sorts it out.
 
 **Where's the log file?**
-`TorBox_Manager_Log.txt` next to the exe. It gets overwritten each launch so it only has the current session.
+`TorBox_Manager_Log.txt` next to the exe. It gets overwritten each launch so it only covers the current session. There's also an in-app log strip at the bottom of the window with an "errors only" filter.
+
+**Where's the download history stored?**
+`download_history.json` next to the exe, same folder as `config.json`. It keeps the last 500 completed downloads. You can also view and clear it from the History tab in the app.
 
 **I want to run from source instead**
-Clone the repo, install Python 3.10+, and run `launch.bat`. See the `tbm/` folder for source and requirements.
+Clone the repo, install Python 3.10+, and run `launch.bat`. It creates a venv, installs dependencies, and launches the app. Optional dependencies (py7zr, rarfile) are installed automatically if missing. See `tbm/` for source and `requirements.txt` for the full list.
+
+**Auto-extract isn't working for .rar or .7z**
+These need optional packages — `rarfile` (+ unrar.exe or WinRAR in PATH for .rar) and `py7zr` (for .7z). `launch.bat` installs them automatically. If you're running from source manually, run `pip install py7zr rarfile` in your venv. .zip and .tar.* always work with no extras.
 
 ---
 
