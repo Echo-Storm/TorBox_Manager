@@ -108,6 +108,8 @@ These need optional packages — `rarfile` (+ unrar.exe or WinRAR in PATH for .r
 
 ## Version history
 
+**v0.7.2** — Settings dialog scrollable (Save always visible), .7z/.rar support in distributed exe
+
 **v0.7.1** — Download history tab, 4 bug fixes (history table alignment, Settings delete-after toggle dependency, clear history error handling, docstring)
 
 **v0.7.0** — Per-item subfolders, auto-extract archives, watch folder, delete from TorBox after download, queue filter bar, 4 bug fixes (startup crash from missing QLineEdit import, stale version number, tarfile deprecation warning, Explorer path quoting)

@@ -1,5 +1,5 @@
 # TorBox Manager — EchoStorm Edition
-# Project Specification v0.7.1
+# Project Specification v0.7.2
 
 ---
 

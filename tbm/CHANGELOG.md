@@ -2,6 +2,18 @@
 
 ---
 
+## v0.7.2 — 2026-06-11
+
+### Fixes
+- **Settings dialog cut off on smaller screens** — the dialog had no scroll area, so
+  on shorter displays the Save button and lower sections were unreachable. The form
+  content now scrolls; Save/Cancel are pinned below the scroll area and always visible.
+- **Build missing py7zr and rarfile** — optional extraction packages were not installed
+  during the GitHub Actions build, so the distributed exe couldn't handle .7z or .rar
+  files. Both packages are now included in the build step.
+
+---
+
 ## v0.7.1 — 2026-06-11
 
 ### Features

@@ -34,12 +34,14 @@ from PyQt6.QtWidgets import (
     QLabel,
     QLineEdit,
     QPushButton,
+    QScrollArea,
     QSizePolicy,
     QTableWidget,
     QTableWidgetItem,
     QTextBrowser,
     QTextEdit,
     QVBoxLayout,
+    QWidget,
 )
 
 from constants import (
@@ -492,9 +494,38 @@ class SettingsDialog(QDialog):
         self._build_ui()
 
     def _build_ui(self):
-        layout = QVBoxLayout(self)
+        outer = QVBoxLayout(self)
+        outer.setSpacing(0)
+        outer.setContentsMargins(0, 0, 0, 0)
+
+        # Scrollable content area
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        scroll.setStyleSheet(f"QScrollArea {{ background-color: {COLOR_BG}; border: none; }}")
+        content = QWidget()
+        content.setStyleSheet(f"background-color: {COLOR_BG};")
+        layout = QVBoxLayout(content)
         layout.setSpacing(14)
-        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setContentsMargins(16, 16, 16, 8)
+        scroll.setWidget(content)
+        outer.addWidget(scroll)
+
+        # Buttons pinned outside the scroll area
+        btn_container = QWidget()
+        btn_container.setStyleSheet(f"background-color: {COLOR_BG}; border-top: 1px solid {COLOR_BORDER};")
+        btn_layout = QVBoxLayout(btn_container)
+        btn_layout.setContentsMargins(16, 8, 16, 12)
+        self._error_label = QLabel("")
+        self._error_label.setStyleSheet("color: #e05050; font-size: 8pt;")
+        btn_layout.addWidget(self._error_label)
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(self._validate_and_accept)
+        buttons.rejected.connect(self.reject)
+        btn_layout.addWidget(buttons)
+        outer.addWidget(btn_container)
 
         # ---- API Key ----
         layout.addWidget(_section_label("TorBox API Key"))
@@ -650,20 +681,7 @@ class SettingsDialog(QDialog):
             f"({MIN_POLL_INTERVAL_SEC}-{MAX_POLL_INTERVAL_SEC} seconds)"
         ))
 
-        # ---- Error label ----
-        self._error_label = QLabel("")
-        self._error_label.setStyleSheet("color: #e05050; font-size: 8pt;")
-        layout.addWidget(self._error_label)
-
         layout.addStretch()
-
-        # ---- Buttons ----
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel
-        )
-        buttons.accepted.connect(self._validate_and_accept)
-        buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
 
     def _toggle_key_visibility(self, checked: bool):
         mode = QLineEdit.EchoMode.Normal if checked else QLineEdit.EchoMode.Password
