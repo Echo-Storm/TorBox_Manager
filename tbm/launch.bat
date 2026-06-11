@@ -32,11 +32,6 @@ venv\Scripts\python.exe -c "import py7zr, rarfile" 2>nul || (
     venv\Scripts\pip.exe install --quiet py7zr rarfile
 )
 
-:: Launch the app (pythonw suppresses the console window once confirmed working)
-venv\Scripts\python.exe main.py
-if errorlevel 1 (
-    echo.
-    echo Application exited with an error.
-    echo Check TorBox_Manager_Log.txt in this folder for details.
-    pause
-)
+:: Launch without a console window. pythonw.exe is the windowless Python runtime;
+:: "start" detaches it immediately so this batch exits and the cmd window closes.
+start "" venv\Scripts\pythonw.exe main.py

@@ -2,6 +2,19 @@
 
 ---
 
+## v0.7.3 — 2026-06-11
+
+### Fixes
+- **Console window visible when using the app** — three sources eliminated:
+  - `launch.bat` now uses `pythonw.exe` via `start` so the cmd window closes
+    immediately after launch instead of staying open for the app's lifetime.
+  - Open in Explorer and Restart tray action now pass `CREATE_NO_WINDOW` to
+    `subprocess.Popen` so no console flashes on those actions.
+  - `rarfile.OPEN_ARGS` set to `CREATE_NO_WINDOW` so `unrar.exe` runs hidden
+    when extracting .rar archives.
+
+---
+
 ## v0.7.2 — 2026-06-11
 
 ### Fixes

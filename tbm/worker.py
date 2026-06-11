@@ -50,6 +50,9 @@ except ImportError:
 
 try:
     import rarfile
+    import subprocess as _sp
+    rarfile.OPEN_ARGS = {"creationflags": getattr(_sp, "CREATE_NO_WINDOW", 0)}
+    del _sp
     _HAVE_RAR = True
 except ImportError:
     _HAVE_RAR = False

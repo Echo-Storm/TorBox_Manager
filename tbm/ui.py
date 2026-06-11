@@ -2484,7 +2484,10 @@ class MainWindow(QMainWindow):
             # /select,<path> must be a single argument; quoting the path handles
             # spaces. Commas in the path itself are the one remaining edge case
             # explorer can't handle — fall back to opening the folder in that case.
-            subprocess.Popen(["explorer", f'/select,"{file_path}"'])
+            subprocess.Popen(
+                ["explorer", f'/select,"{file_path}"'],
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
         except Exception:
             try:
                 os.startfile(folder)
@@ -2634,10 +2637,11 @@ class MainWindow(QMainWindow):
         QApplication.instance().quit()
         # In a frozen PyInstaller exe sys.executable IS the exe, so sys.argv[0]
         # would duplicate it as an argument.  In source mode we need both.
+        _no_window = getattr(subprocess, "CREATE_NO_WINDOW", 0)
         if getattr(sys, "frozen", False):
-            subprocess.Popen([sys.executable])
+            subprocess.Popen([sys.executable], creationflags=_no_window)
         else:
-            subprocess.Popen([sys.executable] + sys.argv)
+            subprocess.Popen([sys.executable] + sys.argv, creationflags=_no_window)
 
     def _tray_quit(self):
         self._poll_timer.stop()
