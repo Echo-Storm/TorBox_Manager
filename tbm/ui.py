@@ -43,6 +43,7 @@ from PyQt6.QtWidgets import (
     QSizePolicy,
     QSplitter,
     QSystemTrayIcon,
+    QTabWidget,
     QTableWidget,
     QTableWidgetItem,
     QTextEdit,
@@ -54,6 +55,7 @@ from PyQt6.QtWidgets import (
 )
 
 import api
+import history as hist
 from config   import load_config, save_config, is_configured
 from constants import (
     APP_NAME,
@@ -237,6 +239,31 @@ MAIN_STYLE = f"""
     }}
     QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{
         width: 0px;
+    }}
+    QTabWidget::pane {{
+        border: none;
+        background-color: transparent;
+    }}
+    QTabBar::tab {{
+        background-color: {COLOR_PANEL};
+        color: {COLOR_TEXT_MUTED};
+        border: 1px solid {COLOR_BORDER};
+        border-bottom: none;
+        padding: 5px 18px;
+        font-size: 8pt;
+        font-weight: bold;
+        letter-spacing: 1px;
+        min-width: 60px;
+    }}
+    QTabBar::tab:selected {{
+        background-color: {COLOR_BG};
+        color: {COLOR_ACCENT};
+        border-color: {COLOR_BORDER_BRIGHT};
+        border-bottom: 2px solid {COLOR_BG};
+    }}
+    QTabBar::tab:hover:!selected {{
+        color: {COLOR_TEXT};
+        background-color: {COLOR_PANEL_ALT};
     }}
 """
 
@@ -426,6 +453,14 @@ def _make_badge(source_type: str) -> QLabel:
     return badge
 
 
+def _hcell(text: str) -> QTableWidgetItem:
+    """Muted centred cell for the history table."""
+    c = QTableWidgetItem(str(text))
+    c.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+    c.setForeground(QColor(COLOR_TEXT_MUTED))
+    return c
+
+
 # ---------------------------------------------------------------------------
 # Left panel section label
 # ---------------------------------------------------------------------------
@@ -437,6 +472,19 @@ def _section_label(text: str) -> QLabel:
         f"letter-spacing: 2px; padding: 10px 0 4px 0; background: transparent;"
     )
     return lbl
+
+
+# ---------------------------------------------------------------------------
+# History table columns (local — not shared with the queue table)
+# ---------------------------------------------------------------------------
+
+_HCOL_TIME  = 0
+_HCOL_NAME  = 1
+_HCOL_FILE  = 2
+_HCOL_TYPE  = 3
+_HCOL_SIZE  = 4
+_HCOL_COUNT = 5
+_HCOL_HEADERS = ["Time", "Name", "File", "Type", "Size"]
 
 
 # ---------------------------------------------------------------------------
@@ -751,15 +799,31 @@ class MainWindow(QMainWindow):
         return panel
 
     def _build_right_panel(self) -> QWidget:
-        """Right side: filter bar + queue table (top) + log strip (bottom)."""
+        """Right side: tab widget (Queue / History) + log strip (bottom)."""
         right = QWidget()
         right.setStyleSheet("background-color: transparent;")
         layout = QVBoxLayout(right)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        layout.addWidget(self._build_filter_bar())
-        layout.addWidget(self._build_queue_table(), stretch=1)
+        # --- Tab widget ---
+        self._tabs = QTabWidget()
+        self._tabs.currentChanged.connect(self._on_tab_changed)
+
+        # Tab 0 — Queue
+        queue_page = QWidget()
+        queue_page.setStyleSheet("background: transparent;")
+        queue_layout = QVBoxLayout(queue_page)
+        queue_layout.setContentsMargins(0, 0, 0, 0)
+        queue_layout.setSpacing(0)
+        queue_layout.addWidget(self._build_filter_bar())
+        queue_layout.addWidget(self._build_queue_table(), stretch=1)
+        self._tabs.addTab(queue_page, "Queue")
+
+        # Tab 1 — History
+        self._tabs.addTab(self._build_history_tab(), "History")
+
+        layout.addWidget(self._tabs, stretch=1)
 
         log_strip = self._build_log_strip()
         log_strip.setFixedHeight(140)
@@ -822,6 +886,181 @@ class MainWindow(QMainWindow):
         row.addWidget(self._filter_count_label)
 
         return bar
+
+    def _build_history_tab(self) -> QWidget:
+        """History tab — table of completed downloads with a Clear button."""
+        page = QWidget()
+        page.setStyleSheet("background: transparent;")
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        # Header row — label + clear button
+        header = QWidget()
+        header.setFixedHeight(34)
+        header.setStyleSheet(f"""
+            QWidget {{
+                background-color: {COLOR_PANEL};
+                border-bottom: 1px solid {COLOR_BORDER};
+            }}
+        """)
+        h_row = QHBoxLayout(header)
+        h_row.setContentsMargins(8, 0, 8, 0)
+        h_row.setSpacing(6)
+
+        count_lbl = QLabel("")
+        count_lbl.setStyleSheet(f"color: {COLOR_TEXT_MUTED}; font-size: 8pt; border: none; background: transparent;")
+        self._history_count_label = count_lbl
+        h_row.addWidget(count_lbl, stretch=1)
+
+        clear_btn = QPushButton("Clear History")
+        clear_btn.setFixedHeight(24)
+        clear_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: transparent;
+                color: {COLOR_TEXT_MUTED};
+                border: 1px solid {COLOR_BORDER};
+                border-radius: 3px;
+                font-size: 8pt;
+                padding: 0 8px;
+            }}
+            QPushButton:hover {{
+                color: #e05050;
+                border-color: #8b3030;
+            }}
+        """)
+        clear_btn.clicked.connect(self._on_history_clear)
+        h_row.addWidget(clear_btn)
+        layout.addWidget(header)
+
+        # History table
+        self._history_table = QTableWidget()
+        self._history_table.setColumnCount(_HCOL_COUNT)
+        self._history_table.setHorizontalHeaderLabels(_HCOL_HEADERS)
+        self._history_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self._history_table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
+        self._history_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self._history_table.setAlternatingRowColors(True)
+        self._history_table.setShowGrid(True)
+        self._history_table.verticalHeader().setVisible(False)
+        self._history_table.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self._history_table.verticalHeader().setDefaultSectionSize(30)
+
+        hdr = self._history_table.horizontalHeader()
+        hdr.setSectionResizeMode(_HCOL_TIME, QHeaderView.ResizeMode.Fixed)
+        hdr.setSectionResizeMode(_HCOL_NAME, QHeaderView.ResizeMode.Stretch)
+        hdr.setSectionResizeMode(_HCOL_FILE, QHeaderView.ResizeMode.Stretch)
+        hdr.setSectionResizeMode(_HCOL_TYPE, QHeaderView.ResizeMode.Fixed)
+        hdr.setSectionResizeMode(_HCOL_SIZE, QHeaderView.ResizeMode.Fixed)
+        self._history_table.setColumnWidth(_HCOL_TIME, 120)
+        self._history_table.setColumnWidth(_HCOL_TYPE, 110)
+        self._history_table.setColumnWidth(_HCOL_SIZE, 80)
+
+        # Double-click to open the file's folder in Explorer
+        self._history_table.doubleClicked.connect(self._on_history_double_click)
+
+        # Right-click to copy path
+        self._history_table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self._history_table.customContextMenuRequested.connect(self._on_history_context_menu)
+
+        layout.addWidget(self._history_table, stretch=1)
+        return page
+
+    def _on_tab_changed(self, index: int):
+        """Refresh history table when the History tab is opened."""
+        if index == 1:
+            self._refresh_history_table()
+
+    def _refresh_history_table(self):
+        """Reload history from disk and repopulate the history table."""
+        entries = hist.load()
+        entries_reversed = list(reversed(entries))   # newest first
+
+        self._history_table.setRowCount(0)
+        for entry in entries_reversed:
+            row = self._history_table.rowCount()
+            self._history_table.insertRow(row)
+
+            # Time
+            ts_raw = entry.get("ts", "")
+            ts_display = ts_raw.replace("T", "  ") if "T" in ts_raw else ts_raw
+            self._history_table.setItem(row, _HCOL_TIME, _hcell(ts_display[:17]))
+
+            # Name
+            name_item = _hcell(entry.get("name", ""))
+            name_item.setForeground(QColor(COLOR_TEXT))
+            name_item.setFont(QFont(FONT_UI_FAMILY, FONT_UI_SIZE, QFont.Weight.Bold))
+            name_item.setToolTip(entry.get("name", ""))
+            self._history_table.setItem(row, _HCOL_NAME, name_item)
+
+            # File — store full path as UserRole for double-click / context menu
+            file_item = _hcell(entry.get("file", ""))
+            file_item.setData(Qt.ItemDataRole.UserRole, entry.get("path", ""))
+            file_item.setToolTip(entry.get("path", ""))
+            self._history_table.setItem(row, _HCOL_FILE, file_item)
+
+            # Type badge
+            source_type = entry.get("source_type", "")
+            self._history_table.setCellWidget(row, _HCOL_TYPE, _make_badge(source_type))
+
+            # Size
+            self._history_table.setItem(row, _HCOL_SIZE, _hcell(_fmt_size(entry.get("size_bytes", 0))))
+
+        n = len(entries_reversed)
+        self._history_count_label.setText(f"{n} download{'s' if n != 1 else ''}")
+
+    def _on_history_clear(self):
+        reply = QMessageBox.question(
+            self,
+            "Clear History",
+            "Clear all download history?\n\nThis cannot be undone.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        hist.clear()
+        self._history_table.setRowCount(0)
+        self._history_count_label.setText("0 downloads")
+        self._log("Download history cleared.")
+
+    def _on_history_double_click(self, index):
+        """Double-click a history row to open the file's folder in Explorer."""
+        file_item = self._history_table.item(index.row(), _HCOL_FILE)
+        if file_item:
+            path = file_item.data(Qt.ItemDataRole.UserRole)
+            if path:
+                self._open_in_explorer(path)
+
+    def _on_history_context_menu(self, pos):
+        """Right-click history row — copy path to clipboard."""
+        row = self._history_table.rowAt(pos.y())
+        if row < 0:
+            return
+        file_item = self._history_table.item(row, _HCOL_FILE)
+        if not file_item:
+            return
+        path = file_item.data(Qt.ItemDataRole.UserRole)
+
+        menu = QMenu(self)
+        menu.setStyleSheet(f"""
+            QMenu {{
+                background-color: {COLOR_PANEL};
+                color: {COLOR_TEXT};
+                border: 1px solid {COLOR_BORDER};
+            }}
+            QMenu::item:selected {{
+                background-color: {COLOR_ACCENT};
+                color: #000000;
+            }}
+        """)
+        copy_action = menu.addAction("Copy Path")
+        open_action = menu.addAction("Open in Explorer")
+
+        chosen = menu.exec(self._history_table.viewport().mapToGlobal(pos))
+        if chosen == copy_action and path:
+            QApplication.clipboard().setText(path)
+        elif chosen == open_action and path:
+            self._open_in_explorer(path)
 
     def _build_queue_table(self) -> QWidget:
         """
@@ -2006,6 +2245,10 @@ class MainWindow(QMainWindow):
         clean_path = unquote(file_path)
         self._log(f"Download complete: {fname}  ->  {clean_path}")
         self._set_status(f"Done: {fname}")
+
+        # Record in download history
+        item = self._row_items.get(key, {})
+        hist.append(item, file_path)
 
         # Auto-extract — run on a background thread so the UI stays responsive
         if self.config.get("auto_extract", True) and ExtractWorker.is_extractable(file_path):
