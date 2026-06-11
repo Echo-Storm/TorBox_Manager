@@ -26,14 +26,21 @@ from constants import (
 # ---------------------------------------------------------------------------
 
 DEFAULTS = {
-    "api_key":                 "",    # TorBox bearer token — required before any API call
-    "download_dir":            "",    # absolute path; empty means user hasn't configured it yet
-    "poll_interval":           DEFAULT_POLL_INTERVAL_SEC,
+    "api_key":                  "",    # TorBox bearer token — required before any API call
+    "download_dir":             "",    # absolute path; empty means user hasn't configured it yet
+    "poll_interval":            DEFAULT_POLL_INTERVAL_SEC,
     "max_concurrent_downloads": DEFAULT_MAX_CONCURRENT_DL,
-    "columns":                 dict(COL_VISIBILITY_DEFAULTS),  # optional column visibility
-    "minimize_to_tray":        True,   # hide to tray on close vs quit
-    "tray_notifications":      False,  # show tray popup when a download finishes
-    "window_geometry":         "",    # hex-encoded QByteArray for restoring window position/size
+    "columns":                  dict(COL_VISIBILITY_DEFAULTS),  # optional column visibility
+    "minimize_to_tray":         True,   # hide to tray on close vs quit
+    "tray_notifications":       False,  # show tray popup when a download finishes
+    "window_geometry":          "",    # hex-encoded QByteArray for restoring window position/size
+    "create_subfolder":         True,   # place each download in its own named subfolder
+    "auto_extract":             True,   # extract archives automatically after download
+    "delete_after_extract":     False,  # delete the archive file after successful extraction
+    "watch_folder_enabled":     False,  # watch a folder for .torrent/.nzb files to auto-add
+    "watch_folder":             "",     # absolute path to the watch folder
+    "watch_folder_delete":      True,   # delete the file from the watch folder after submitting
+    "delete_from_torbox":       False,  # remove item from TorBox after local download completes
 }
 
 # ---------------------------------------------------------------------------

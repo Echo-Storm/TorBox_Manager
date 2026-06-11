@@ -2,6 +2,55 @@
 
 ---
 
+## v0.7.0 — 2026-06-11
+
+### Features
+- **Per-item download subfolders** — each download is placed into a subfolder named after
+  the item, inside the configured download directory. Sanitises illegal Windows characters
+  automatically. Toggle in Settings (on by default). Multi-file torrents share the same
+  subfolder so all their files land together.
+- **Auto-extract archives** — after a local download completes, archives (.zip, .tar,
+  .tar.gz, .tar.bz2, .tar.xz, .tgz, .7z, .rar) are automatically extracted to the same
+  folder on a background thread. Toggle in Settings (on by default). py7zr and rarfile are
+  optional pip packages; the app installs them silently via launch.bat and fails gracefully
+  with a clear message if they're missing for a specific format.
+- **Delete archive after extraction** — optionally remove the original archive file once
+  extraction succeeds. Off by default. Separate toggle from auto-extract so you can extract
+  without deleting.
+- **Watch folder** — point the app at a folder and any .torrent or .nzb file dropped into
+  it is automatically submitted to TorBox. Uses Qt's `QFileSystemWatcher` with a 1-second
+  debounce so partially-copied files aren't read mid-write. Optionally deletes the file
+  from the folder after a successful submission. Existing files in the folder are processed
+  on startup. Toggle in Settings (off by default).
+- **Remove from TorBox after download** — once all local files for an item are downloaded,
+  optionally fire a delete call to TorBox to clean up the remote queue entry. Off by default.
+  Toggle in Settings.
+- **Queue filter bar** — a search bar above the queue table filters rows by name in real
+  time. Shows a live count of visible vs. total items. Filter persists across poll cycles
+  so it stays active while the queue refreshes. ✕ button clears the filter.
+
+### Fixes
+- **Crash on startup** — `QLineEdit` was used in the new filter bar but missing from the
+  PyQt6 imports, causing a `NameError` every time the app launched. Fixed. (Also removed
+  the unused `QScrollArea` import left over from an earlier draft.)
+- **Version number not bumped** — `APP_VERSION` in constants.py still read `"0.6.0"`.
+  Fixed to `"0.7.0"`. The header bar, About dialog, and update checker now show the
+  correct version.
+- **tarfile deprecation warning** — `tarfile.extractall()` without `filter=` generates a
+  `DeprecationWarning` in Python 3.12+ and will become an error in a future version. Now
+  passes `filter="data"` (which also blocks path-traversal entries) with a graceful fallback
+  for Python < 3.12.
+- **Explorer /select path not quoted** — `_open_in_explorer` passed the path unquoted in
+  the `/select,<path>` argument. Paths containing commas would confuse Explorer's argument
+  parser. Now quotes the path inside the argument string.
+
+### Dependencies
+- **launch.bat** now checks for `py7zr` and `rarfile` on every startup (near-instant import
+  check; pip only runs if something is missing). These are listed in requirements.txt as
+  optional and are not required for core functionality.
+
+---
+
 ## v0.6.0 — 2026-05-19
 
 ### Features

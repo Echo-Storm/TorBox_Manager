@@ -10,3 +10,9 @@
 
 PyQt6>=6.5.0
 requests>=2.28.0
+
+# Optional — archive extraction support
+# py7zr handles .7z files (pure Python, no external binary needed)
+# rarfile handles .rar files (requires unrar.exe or WinRAR in PATH)
+py7zr>=0.20.0
+rarfile>=4.0

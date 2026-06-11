@@ -28,7 +28,7 @@ from urllib.parse import unquote
 import webbrowser
 from datetime import datetime
 
-from PyQt6.QtCore    import Qt, QThreadPool, QTimer
+from PyQt6.QtCore    import Qt, QFileSystemWatcher, QThreadPool, QTimer
 from PyQt6.QtGui     import QAction, QBrush, QColor, QFont
 from PyQt6.QtWidgets import (
     QApplication,
@@ -36,10 +36,10 @@ from PyQt6.QtWidgets import (
     QFileDialog,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QMainWindow,
     QProgressBar,
     QPushButton,
-    QScrollArea,
     QSizePolicy,
     QSplitter,
     QSystemTrayIcon,
@@ -108,7 +108,7 @@ from constants import (
     TYPE_LABELS,
 )
 from dialogs  import AboutDialog, AddLinkDialog, AddMagnetDialog, FilePickerDialog, SettingsDialog
-from worker   import AddWorker, DeleteWorker, DownloadWorker, LinkRequestWorker, PollWorker, UpdateCheckWorker
+from worker   import AddWorker, DeleteWorker, DownloadWorker, ExtractWorker, LinkRequestWorker, PollWorker, UpdateCheckWorker
 
 
 # ---------------------------------------------------------------------------
@@ -463,10 +463,14 @@ class MainWindow(QMainWindow):
         self._deleted_keys: set[str] = set()
         # All log lines stored as (level, formatted_string) for filter re-render
         self._log_lines: list[tuple[str, str]] = []
+        # Watch folder state
+        self._watcher:   QFileSystemWatcher | None = None
+        self._watch_submitted: set[str] = set()   # paths submitted this session
 
         self._build_ui()
         self._build_tray()
         self._setup_timer()
+        self._setup_watcher()
 
         # Open Settings immediately if API key is missing
         if not is_configured(self.config):
@@ -747,19 +751,77 @@ class MainWindow(QMainWindow):
         return panel
 
     def _build_right_panel(self) -> QWidget:
-        """Right side: queue table (top) + log strip (bottom)."""
+        """Right side: filter bar + queue table (top) + log strip (bottom)."""
         right = QWidget()
         right.setStyleSheet("background-color: transparent;")
         layout = QVBoxLayout(right)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
+        layout.addWidget(self._build_filter_bar())
         layout.addWidget(self._build_queue_table(), stretch=1)
 
         log_strip = self._build_log_strip()
         log_strip.setFixedHeight(140)
         layout.addWidget(log_strip)
         return right
+
+    def _build_filter_bar(self) -> QWidget:
+        bar = QWidget()
+        bar.setFixedHeight(34)
+        bar.setStyleSheet(f"""
+            QWidget {{
+                background-color: {COLOR_PANEL};
+                border-bottom: 1px solid {COLOR_BORDER};
+            }}
+        """)
+        row = QHBoxLayout(bar)
+        row.setContentsMargins(8, 4, 8, 4)
+        row.setSpacing(6)
+
+        self._filter_input = QLineEdit()
+        self._filter_input.setPlaceholderText("Filter queue…")
+        self._filter_input.setMinimumHeight(24)
+        self._filter_input.setStyleSheet(f"""
+            QLineEdit {{
+                background-color: {COLOR_BG};
+                color: {COLOR_TEXT};
+                border: 1px solid {COLOR_BORDER};
+                border-radius: 3px;
+                padding: 0 6px;
+                font-size: 9pt;
+            }}
+            QLineEdit:focus {{
+                border-color: {COLOR_ACCENT_DIM};
+            }}
+        """)
+        self._filter_input.textChanged.connect(self._apply_filter)
+        row.addWidget(self._filter_input, stretch=1)
+
+        self._filter_clear_btn = QPushButton("✕")
+        self._filter_clear_btn.setFixedSize(24, 24)
+        self._filter_clear_btn.setToolTip("Clear filter")
+        self._filter_clear_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: transparent;
+                color: {COLOR_TEXT_MUTED};
+                border: none;
+                font-size: 9pt;
+            }}
+            QPushButton:hover {{
+                color: {COLOR_TEXT};
+            }}
+        """)
+        self._filter_clear_btn.clicked.connect(self._filter_input.clear)
+        row.addWidget(self._filter_clear_btn)
+
+        self._filter_count_label = QLabel("")
+        self._filter_count_label.setFixedWidth(70)
+        self._filter_count_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self._filter_count_label.setStyleSheet(f"color: {COLOR_TEXT_MUTED}; font-size: 8pt; border: none; background: transparent;")
+        row.addWidget(self._filter_count_label)
+
+        return bar
 
     def _build_queue_table(self) -> QWidget:
         """
@@ -1394,6 +1456,7 @@ class MainWindow(QMainWindow):
             else:
                 self._log("Settings updated in memory but could not save to disk.", "WARN")
             self._update_poll_interval()
+            self._setup_watcher()
 
     def _on_about(self):
         AboutDialog(self).exec()
@@ -1437,6 +1500,23 @@ class MainWindow(QMainWindow):
         worker.signals.error.connect(self._on_poll_error)
         worker.signals.status.connect(self._set_status)
         self._pool.start(worker)
+
+    def _apply_filter(self, text: str = ""):
+        """Show/hide rows based on the filter bar text. Updates the count label."""
+        text = text.strip().lower()
+        total   = self._table.rowCount()
+        visible = 0
+        for row in range(total):
+            item = self._table.item(row, COL_NAME)
+            name = item.text().lower() if item else ""
+            hide = bool(text) and text not in name
+            self._table.setRowHidden(row, hide)
+            if not hide:
+                visible += 1
+        if text:
+            self._filter_count_label.setText(f"{visible} / {total}")
+        else:
+            self._filter_count_label.setText(f"{total} item{'s' if total != 1 else ''}")
 
     def _on_poll_finished(self, items: list):
         """Slot — runs on main thread — update the queue table from fresh data."""
@@ -1489,6 +1569,10 @@ class MainWindow(QMainWindow):
         # Clear the deleted-keys suppression set after each poll cycle.
         # By the next poll TorBox will have finished processing the deletes.
         self._deleted_keys.clear()
+
+        # Re-apply any active filter so rows added/updated this poll respect it.
+        if hasattr(self, "_filter_input"):
+            self._apply_filter(self._filter_input.text())
 
     def _add_queue_row(self, key: str, item: dict):
         """Insert a new row into the queue table for the given item."""
@@ -1844,6 +1928,16 @@ class MainWindow(QMainWindow):
         self._log(f"Starting download: {display_name}")
         self._set_status(f"Downloading: {display_name}")
 
+        # Per-item subfolder — create once; idempotent for multi-file torrents
+        if self.config.get("create_subfolder", True):
+            raw = item.get("name", "download")
+            folder_name = re.sub(r'[\\/:*?"<>|]', "_", raw).strip(". ") or "download"
+            download_dir = os.path.join(download_dir, folder_name)
+            try:
+                os.makedirs(download_dir, exist_ok=True)
+            except OSError as exc:
+                self._log(f"Could not create subfolder '{folder_name}': {exc}", "WARN")
+
         row = self._row_index.get(key)
         if row is not None:
             pbar = self._table.cellWidget(row, COL_PROGRESS)
@@ -1913,6 +2007,10 @@ class MainWindow(QMainWindow):
         self._log(f"Download complete: {fname}  ->  {clean_path}")
         self._set_status(f"Done: {fname}")
 
+        # Auto-extract — run on a background thread so the UI stays responsive
+        if self.config.get("auto_extract", True) and ExtractWorker.is_extractable(file_path):
+            self._start_extract(file_path)
+
         # Tray notification — only if enabled in settings
         if self.config.get("tray_notifications", False):
             self._tray.showMessage(
@@ -1925,6 +2023,12 @@ class MainWindow(QMainWindow):
         # Only update the row to Done state when all files for this key are finished
         if key in self._downloading:
             return
+
+        # Auto-delete from TorBox once all files for this item are locally complete
+        if self.config.get("delete_from_torbox", False):
+            item = self._row_items.get(key)
+            if item:
+                self._auto_delete_from_torbox(key, item)
 
         row = self._row_index.get(key)
         if row is None:
@@ -1995,15 +2099,144 @@ class MainWindow(QMainWindow):
             dl_btn.setText("Retry")
             dl_btn.setEnabled(True)
 
+    def _auto_delete_from_torbox(self, key: str, item: dict):
+        """Fire a DeleteWorker to remove the item from TorBox after a completed download."""
+        source_type = item.get("source_type", "")
+        item_id     = item.get("id")
+        name        = item.get("name", key)
+
+        if source_type in ("torrent", "magnet"):
+            delete_fn = lambda: api.delete_torrent(self.config.get("api_key", ""), item_id)
+        elif source_type == "webdl":
+            delete_fn = lambda: api.delete_webdl(self.config.get("api_key", ""), item_id)
+        elif source_type == "usenet":
+            delete_fn = lambda: api.delete_usenet(self.config.get("api_key", ""), item_id)
+        else:
+            return
+
+        worker = DeleteWorker(delete_fn, key, name)
+        worker.signals.finished.connect(
+            lambda ok, detail, k: (
+                self._log(f"Removed from TorBox: {name}") if ok
+                else self._log(f"Could not remove '{name}' from TorBox: {detail}", "WARN")
+            )
+        )
+        worker.signals.status.connect(lambda msg: self._log(msg))
+        self._pool.start(worker)
+
+    def _start_extract(self, archive_path: str):
+        """Submit an ExtractWorker for the given archive file."""
+        extract_dir = os.path.dirname(archive_path)
+        delete      = self.config.get("delete_after_extract", False)
+        worker      = ExtractWorker(archive_path, extract_dir, delete_after=delete)
+        worker.signals.status.connect(lambda msg: self._log(msg))
+        worker.signals.finished.connect(
+            lambda apath, dest: self._on_extract_finished(apath, dest)
+        )
+        worker.signals.error.connect(
+            lambda msg: self._log(f"Extract error: {msg}", "ERROR")
+        )
+        self._pool.start(worker)
+
+    def _on_extract_finished(self, archive_path: str, extract_dir: str):
+        fname = os.path.basename(archive_path)
+        self._log(f"Extracted: {fname}  ->  {extract_dir}")
+        self._set_status(f"Extracted: {fname}")
+
+    # -----------------------------------------------------------------------
+    # Watch folder
+    # -----------------------------------------------------------------------
+
+    def _setup_watcher(self):
+        """Start or restart the folder watcher based on current config."""
+        self._teardown_watcher()
+
+        if not self.config.get("watch_folder_enabled", False):
+            return
+
+        folder = self.config.get("watch_folder", "").strip()
+        if not folder or not os.path.isdir(folder):
+            if folder:
+                self._log(f"Watch folder not found: {folder}", "WARN")
+            return
+
+        self._watcher = QFileSystemWatcher([folder], self)
+        self._watcher.directoryChanged.connect(self._on_watch_dir_changed)
+        self._log(f"Watching folder: {folder}")
+
+        # Process any files already sitting in the folder
+        self._scan_watch_folder(folder)
+
+    def _teardown_watcher(self):
+        if self._watcher is not None:
+            self._watcher.directoryChanged.disconnect()
+            self._watcher = None
+
+    def _on_watch_dir_changed(self, path: str):
+        # Brief delay so large files finish copying before we try to read them
+        QTimer.singleShot(1000, lambda: self._scan_watch_folder(path))
+
+    def _scan_watch_folder(self, folder: str):
+        """Submit any .torrent or .nzb files in the folder not already processed."""
+        if not os.path.isdir(folder):
+            return
+        for fname in os.listdir(folder):
+            if not fname.lower().endswith((".torrent", ".nzb")):
+                continue
+            fpath = os.path.join(folder, fname)
+            if fpath in self._watch_submitted:
+                continue
+            if not os.path.isfile(fpath):
+                continue
+            self._watch_submitted.add(fpath)
+            self._submit_watch_file(fpath)
+
+    def _submit_watch_file(self, file_path: str):
+        """Submit a .torrent or .nzb from the watch folder via AddWorker."""
+        fname = os.path.basename(file_path)
+        api_key = self.config.get("api_key", "")
+
+        if fname.lower().endswith(".torrent"):
+            add_fn    = lambda: api.add_torrent_file(api_key, file_path)
+            item_type = "torrent"
+        elif fname.lower().endswith(".nzb"):
+            add_fn    = lambda: api.add_nzb_file(api_key, file_path)
+            item_type = "nzb"
+        else:
+            return
+
+        self._log(f"Watch folder: submitting {fname}")
+        worker = AddWorker(add_fn, item_type)
+
+        delete = self.config.get("watch_folder_delete", True)
+
+        def _on_done(success: bool, detail: str):
+            if success:
+                self._log(f"Watch folder: added {fname} — {detail}")
+                if delete:
+                    try:
+                        os.remove(file_path)
+                    except OSError as exc:
+                        self._log(f"Watch folder: could not delete '{fname}': {exc}", "WARN")
+            else:
+                self._log(f"Watch folder: failed to add '{fname}' — {detail}", "ERROR")
+                # Remove from submitted set so a retry is possible next scan
+                self._watch_submitted.discard(file_path)
+
+        worker.signals.finished.connect(_on_done)
+        worker.signals.status.connect(lambda msg: self._log(msg))
+        self._pool.start(worker)
+
     @staticmethod
     def _open_in_explorer(file_path: str):
         """Open the folder containing the downloaded file and select it."""
         folder = os.path.dirname(file_path)
         try:
-            # explorer /select highlights the file in the folder — more useful than
-            # just opening the folder. Use list form to handle paths with spaces safely.
             import subprocess
-            subprocess.Popen(["explorer", f"/select,{file_path}"])
+            # /select,<path> must be a single argument; quoting the path handles
+            # spaces. Commas in the path itself are the one remaining edge case
+            # explorer can't handle — fall back to opening the folder in that case.
+            subprocess.Popen(["explorer", f'/select,"{file_path}"'])
         except Exception:
             try:
                 os.startfile(folder)

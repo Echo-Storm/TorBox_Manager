@@ -29,7 +29,9 @@
 
 import os
 import re
+import tarfile
 import time
+import zipfile
 from urllib.parse import unquote
 
 import requests
@@ -38,6 +40,23 @@ from PyQt6.QtCore import QObject, QRunnable, pyqtSignal
 
 import api
 from constants import DOWNLOAD_CHUNK_SIZE
+
+# Optional heavy extractors — fail gracefully if not installed
+try:
+    import py7zr
+    _HAVE_7Z = True
+except ImportError:
+    _HAVE_7Z = False
+
+try:
+    import rarfile
+    _HAVE_RAR = True
+except ImportError:
+    _HAVE_RAR = False
+
+# Extensions this app knows how to extract
+EXTRACTABLE_EXTENSIONS = {".zip", ".7z", ".rar", ".tar",
+                           ".tar.gz", ".tar.bz2", ".tar.xz", ".tgz"}
 
 
 # ---------------------------------------------------------------------------
@@ -479,3 +498,123 @@ class UpdateCheckWorker(QRunnable):
             self.signals.update_available.emit(data["latest"], data["url"])
         else:
             self.signals.up_to_date.emit()
+
+
+# ---------------------------------------------------------------------------
+# ExtractWorker — extract a downloaded archive on a background thread
+# ---------------------------------------------------------------------------
+
+class ExtractSignals(QObject):
+    finished = pyqtSignal(str, str)  # (archive_path, extract_dir)
+    error    = pyqtSignal(str)
+    status   = pyqtSignal(str)
+
+
+class ExtractWorker(QRunnable):
+    """
+    Extract a single archive file to a destination directory.
+
+    Supports:
+        .zip            — stdlib zipfile
+        .tar / .tgz / .tar.gz / .tar.bz2 / .tar.xz — stdlib tarfile
+        .7z             — py7zr (pip install py7zr)
+        .rar            — rarfile (pip install rarfile; requires unrar binary)
+
+    Emits finished(archive_path, extract_dir) on success so the caller can
+    optionally delete the archive. Emits error(msg) on any failure, including
+    missing optional dependencies.
+    """
+
+    def __init__(self, archive_path: str, extract_dir: str,
+                 delete_after: bool = False):
+        super().__init__()
+        self.signals       = ExtractSignals()
+        self._archive      = archive_path
+        self._extract_dir  = extract_dir
+        self._delete_after = delete_after
+
+    def run(self):
+        path = self._archive
+        dest = self._extract_dir
+        name = os.path.basename(path)
+
+        self.signals.status.emit(f"Extracting: {name}")
+
+        lower = path.lower()
+
+        try:
+            if lower.endswith(".zip"):
+                self._extract_zip(path, dest)
+
+            elif lower.endswith((".tar.gz", ".tgz", ".tar.bz2", ".tar.xz", ".tar")):
+                self._extract_tar(path, dest)
+
+            elif lower.endswith(".7z"):
+                if not _HAVE_7Z:
+                    self.signals.error.emit(
+                        f"Cannot extract '{name}': py7zr is not installed. "
+                        "Run: pip install py7zr"
+                    )
+                    return
+                self._extract_7z(path, dest)
+
+            elif lower.endswith(".rar"):
+                if not _HAVE_RAR:
+                    self.signals.error.emit(
+                        f"Cannot extract '{name}': rarfile is not installed. "
+                        "Run: pip install rarfile  (also requires unrar or WinRAR)"
+                    )
+                    return
+                self._extract_rar(path, dest)
+
+            else:
+                self.signals.error.emit(
+                    f"Cannot extract '{name}': unsupported archive format."
+                )
+                return
+
+        except Exception as exc:
+            self.signals.error.emit(f"Extraction failed for '{name}': {exc}")
+            return
+
+        self.signals.status.emit(f"Extraction complete: {name} -> {dest}")
+
+        if self._delete_after:
+            try:
+                os.remove(path)
+                self.signals.status.emit(f"Deleted archive: {name}")
+            except OSError as exc:
+                self.signals.status.emit(f"Could not delete archive '{name}': {exc}")
+
+        self.signals.finished.emit(path, dest)
+
+    @staticmethod
+    def _extract_zip(path: str, dest: str):
+        with zipfile.ZipFile(path, "r") as zf:
+            zf.extractall(dest)
+
+    @staticmethod
+    def _extract_tar(path: str, dest: str):
+        with tarfile.open(path, "r:*") as tf:
+            # filter='data' (Python 3.12+) blocks path-traversal entries.
+            # Falls back silently on older Python versions.
+            try:
+                tf.extractall(dest, filter="data")
+            except TypeError:
+                tf.extractall(dest)
+
+    @staticmethod
+    def _extract_7z(path: str, dest: str):
+        with py7zr.SevenZipFile(path, mode="r") as sz:
+            sz.extractall(path=dest)
+
+    @staticmethod
+    def _extract_rar(path: str, dest: str):
+        with rarfile.RarFile(path) as rf:
+            rf.extractall(dest)
+
+    @staticmethod
+    def is_extractable(file_path: str) -> bool:
+        """Return True if the file extension is a supported archive format."""
+        lower = file_path.lower()
+        return any(lower.endswith(ext) for ext in EXTRACTABLE_EXTENSIONS)

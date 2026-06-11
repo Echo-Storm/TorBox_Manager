@@ -45,8 +45,11 @@ When the app opens it'll ask for your **API key** and a **download folder**. Fil
 
 - **Add anything** — magnet links, .torrent files, hoster URLs (1Fichier, Mega, Pixeldrain etc.), and .nzb files
 - **Unified queue** — everything in one table regardless of type, with status, size, seeds, peers, progress
+- **Queue filter** — type in the search bar above the table to filter by name; updates live as the queue polls
 - **Multi-file torrents** — picks which files you want before downloading, so you're not stuck grabbing the whole set
-- **Downloads to your folder** — streams directly to wherever you set, with a live progress bar per file
+- **Downloads to your folder** — streams directly to wherever you set, with a live progress bar per file; each item gets its own subfolder automatically
+- **Auto-extract** — archives (.zip, .rar, .7z, .tar.*) are extracted automatically after download, on a background thread so the UI stays responsive
+- **Watch folder** — drop .torrent or .nzb files into a folder and they get submitted to TorBox automatically
 - **Controlled downloads** — concurrency limit keeps your connection usable; Download All queues everything and feeds the next item as each slot frees up
 - **Right-click rows** — Copy Name, Copy Download Link, Open in Browser (hoster links) — right on the row
 - **Multi-link hoster input** — paste multiple hoster URLs at once, one per line; each gets its own background worker
@@ -69,6 +72,12 @@ Open via the gear icon bottom-left.
 | Poll Interval | How often to check TorBox | 30 seconds |
 | Minimize to Tray | Hide to tray on close instead of quitting | on |
 | Tray Notifications | Popup when a download finishes | off |
+| Create subfolder per download | Each item gets its own named subfolder | on |
+| Auto-extract archives | Extract .zip/.rar/.7z/.tar.* after download | on |
+| Delete archive after extraction | Remove archive once extracted | off |
+| Remove from TorBox after download | Delete remote queue entry when local download completes | off |
+| Watch folder | Auto-submit .torrent/.nzb files dropped into a folder | off |
+| Delete from watch folder after submit | Remove the file from the watch folder on success | on |
 
 Config saves to `config.json` next to the exe. Nothing goes to the registry or AppData.
 
@@ -91,6 +100,8 @@ Clone the repo, install Python 3.10+, and run `launch.bat`. See the `tbm/` folde
 ---
 
 ## Version history
+
+**v0.7.0** — Per-item subfolders, auto-extract archives, watch folder, delete from TorBox after download, queue filter bar, 4 bug fixes (startup crash from missing QLineEdit import, stale version number, tarfile deprecation warning, Explorer path quoting)
 
 **v0.6.0** — Multi-link hoster input, update notifications, 5 bug fixes (right-click link always failed, multi-file torrent button stuck as Open, Retry wired to wrong handler, frozen Restart crash, config upgrade dropped column keys)
 

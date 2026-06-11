@@ -553,6 +553,58 @@ class SettingsDialog(QDialog):
             "Off by default."
         ))
 
+        self._torbox_delete_cb = QCheckBox("Remove item from TorBox after local download completes")
+        self._torbox_delete_cb.setChecked(self._config.get("delete_from_torbox", False))
+        layout.addWidget(self._torbox_delete_cb)
+
+        self._subfolder_cb = QCheckBox("Create a subfolder per download (named after the item)")
+        self._subfolder_cb.setChecked(self._config.get("create_subfolder", True))
+        layout.addWidget(self._subfolder_cb)
+
+        self._extract_cb = QCheckBox("Auto-extract archives after download (.zip, .rar, .7z, .tar.*)")
+        self._extract_cb.setChecked(self._config.get("auto_extract", True))
+        layout.addWidget(self._extract_cb)
+
+        self._delete_cb = QCheckBox("Delete archive file after successful extraction")
+        self._delete_cb.setChecked(self._config.get("delete_after_extract", False))
+        layout.addWidget(self._delete_cb)
+
+        layout.addWidget(_muted_label(
+            ".rar requires rarfile + unrar (or WinRAR). "
+            ".7z requires py7zr. Both are optional — other formats always work."
+        ))
+
+        # ---- Watch Folder ----
+        layout.addWidget(_section_label("Watch Folder"))
+
+        self._watch_enabled_cb = QCheckBox("Watch a folder and auto-submit .torrent and .nzb files")
+        self._watch_enabled_cb.setChecked(self._config.get("watch_folder_enabled", False))
+        self._watch_enabled_cb.toggled.connect(self._toggle_watch_folder_controls)
+        layout.addWidget(self._watch_enabled_cb)
+
+        watch_row = QHBoxLayout()
+        self._watch_input = QLineEdit()
+        self._watch_input.setPlaceholderText("Select a folder to watch...")
+        self._watch_input.setMinimumHeight(30)
+        self._watch_input.setText(self._config.get("watch_folder", ""))
+        watch_row.addWidget(self._watch_input)
+
+        self._watch_browse_btn = QPushButton("Browse...")
+        self._watch_browse_btn.setFixedWidth(80)
+        self._watch_browse_btn.clicked.connect(self._browse_watch_folder)
+        watch_row.addWidget(self._watch_browse_btn)
+        layout.addLayout(watch_row)
+
+        self._watch_delete_cb = QCheckBox("Delete file from watch folder after submitting")
+        self._watch_delete_cb.setChecked(self._config.get("watch_folder_delete", True))
+        layout.addWidget(self._watch_delete_cb)
+
+        layout.addWidget(_muted_label(
+            "Drop .torrent or .nzb files into the folder and they will be added to TorBox automatically."
+        ))
+
+        self._toggle_watch_folder_controls(self._watch_enabled_cb.isChecked())
+
         # ---- Download concurrency ----
         layout.addWidget(_section_label("Concurrent Downloads"))
 
@@ -613,6 +665,18 @@ class SettingsDialog(QDialog):
         mode = QLineEdit.EchoMode.Normal if checked else QLineEdit.EchoMode.Password
         self._key_input.setEchoMode(mode)
 
+    def _toggle_watch_folder_controls(self, enabled: bool):
+        self._watch_input.setEnabled(enabled)
+        self._watch_browse_btn.setEnabled(enabled)
+        self._watch_delete_cb.setEnabled(enabled)
+
+    def _browse_watch_folder(self):
+        current = self._watch_input.text().strip()
+        start   = current if os.path.isdir(current) else os.path.expanduser("~")
+        chosen  = QFileDialog.getExistingDirectory(self, "Select Watch Folder", start)
+        if chosen:
+            self._watch_input.setText(chosen)
+
     def _browse_directory(self):
         current = self._dir_input.text().strip()
         start   = current if os.path.isdir(current) else os.path.expanduser("~")
@@ -635,8 +699,15 @@ class SettingsDialog(QDialog):
         updated = dict(self._config)
         updated["api_key"]            = self._key_input.text().strip()
         updated["download_dir"]       = self._dir_input.text().strip()
-        updated["minimize_to_tray"]   = self._tray_cb.isChecked()
-        updated["tray_notifications"] = self._notify_cb.isChecked()
+        updated["minimize_to_tray"]      = self._tray_cb.isChecked()
+        updated["tray_notifications"]    = self._notify_cb.isChecked()
+        updated["create_subfolder"]      = self._subfolder_cb.isChecked()
+        updated["auto_extract"]          = self._extract_cb.isChecked()
+        updated["delete_after_extract"]  = self._delete_cb.isChecked()
+        updated["watch_folder_enabled"]  = self._watch_enabled_cb.isChecked()
+        updated["watch_folder"]          = self._watch_input.text().strip()
+        updated["watch_folder_delete"]   = self._watch_delete_cb.isChecked()
+        updated["delete_from_torbox"]    = self._torbox_delete_cb.isChecked()
         try:
             concur_val = int(self._concur_input.text())
             concur_val = max(1, min(10, concur_val))
