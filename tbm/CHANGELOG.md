@@ -2,6 +2,31 @@
 
 ---
 
+## v0.7.1 — 2026-06-11
+
+### Features
+- **Download history** — completed downloads are recorded to `download_history.json`
+  alongside `config.json`. A new History tab in the right panel shows all downloads
+  newest-first: time, item name, filename, type badge, and size. Double-click any row to
+  open the file location in Explorer. Right-click for Copy Path or Open in Explorer.
+  Clear History button (with confirmation). History tab auto-refreshes from disk each time
+  it is opened.
+
+### Fixes
+- **History table Name/File columns center-aligned** — long names were horizontally
+  centered making them hard to read. Name is now left-aligned bold, File is left-aligned
+  muted.
+- **`history.load()` docstring said "newest-first"** — it returns oldest-first; the UI
+  reverses for display. Docstring corrected.
+- **Clear History silently failed** — `hist.clear()` return value was not checked. If the
+  write failed the table would be visually emptied but data would reappear on next tab
+  switch. Now shows a warning if the file could not be written.
+- **"Delete archive after extraction" always enabled in Settings** — the checkbox was
+  active even when "Auto-extract" was unchecked, implying it did something it couldn't do.
+  It now grays out automatically when auto-extract is off.
+
+---
+
 ## v0.7.0 — 2026-06-11
 
 ### Features

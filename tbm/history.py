@@ -47,7 +47,7 @@ def _safe_filesize(path: str) -> int:
 # ---------------------------------------------------------------------------
 
 def load() -> list:
-    """Return the full history list, newest-first. Never raises."""
+    """Return the full history list, oldest-first. Never raises."""
     path = _history_path()
     if not os.path.exists(path):
         return []

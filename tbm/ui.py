@@ -986,15 +986,18 @@ class MainWindow(QMainWindow):
             ts_display = ts_raw.replace("T", "  ") if "T" in ts_raw else ts_raw
             self._history_table.setItem(row, _HCOL_TIME, _hcell(ts_display[:17]))
 
-            # Name
-            name_item = _hcell(entry.get("name", ""))
+            # Name — left-aligned, bold, full brightness
+            name_item = QTableWidgetItem(entry.get("name", ""))
+            name_item.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
             name_item.setForeground(QColor(COLOR_TEXT))
             name_item.setFont(QFont(FONT_UI_FAMILY, FONT_UI_SIZE, QFont.Weight.Bold))
             name_item.setToolTip(entry.get("name", ""))
             self._history_table.setItem(row, _HCOL_NAME, name_item)
 
-            # File — store full path as UserRole for double-click / context menu
-            file_item = _hcell(entry.get("file", ""))
+            # File — left-aligned; full path stored for double-click / context menu
+            file_item = QTableWidgetItem(entry.get("file", ""))
+            file_item.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+            file_item.setForeground(QColor(COLOR_TEXT_MUTED))
             file_item.setData(Qt.ItemDataRole.UserRole, entry.get("path", ""))
             file_item.setToolTip(entry.get("path", ""))
             self._history_table.setItem(row, _HCOL_FILE, file_item)
@@ -1018,10 +1021,12 @@ class MainWindow(QMainWindow):
         )
         if reply != QMessageBox.StandardButton.Yes:
             return
-        hist.clear()
-        self._history_table.setRowCount(0)
-        self._history_count_label.setText("0 downloads")
-        self._log("Download history cleared.")
+        if hist.clear():
+            self._history_table.setRowCount(0)
+            self._history_count_label.setText("0 downloads")
+            self._log("Download history cleared.")
+        else:
+            self._log("Could not write history file — history not cleared.", "WARN")
 
     def _on_history_double_click(self, index):
         """Double-click a history row to open the file's folder in Explorer."""

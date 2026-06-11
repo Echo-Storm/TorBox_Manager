@@ -563,6 +563,7 @@ class SettingsDialog(QDialog):
 
         self._extract_cb = QCheckBox("Auto-extract archives after download (.zip, .rar, .7z, .tar.*)")
         self._extract_cb.setChecked(self._config.get("auto_extract", True))
+        self._extract_cb.toggled.connect(self._toggle_extract_controls)
         layout.addWidget(self._extract_cb)
 
         self._delete_cb = QCheckBox("Delete archive file after successful extraction")
@@ -573,6 +574,9 @@ class SettingsDialog(QDialog):
             ".rar requires rarfile + unrar (or WinRAR). "
             ".7z requires py7zr. Both are optional — other formats always work."
         ))
+
+        # Set initial enabled state for the delete-after checkbox
+        self._toggle_extract_controls(self._extract_cb.isChecked())
 
         # ---- Watch Folder ----
         layout.addWidget(_section_label("Watch Folder"))
@@ -664,6 +668,9 @@ class SettingsDialog(QDialog):
     def _toggle_key_visibility(self, checked: bool):
         mode = QLineEdit.EchoMode.Normal if checked else QLineEdit.EchoMode.Password
         self._key_input.setEchoMode(mode)
+
+    def _toggle_extract_controls(self, enabled: bool):
+        self._delete_cb.setEnabled(enabled)
 
     def _toggle_watch_folder_controls(self, enabled: bool):
         self._watch_input.setEnabled(enabled)

@@ -101,6 +101,8 @@ Clone the repo, install Python 3.10+, and run `launch.bat`. See the `tbm/` folde
 
 ## Version history
 
+**v0.7.1** — Download history tab, 4 bug fixes (history table alignment, Settings delete-after toggle dependency, clear history error handling, docstring)
+
 **v0.7.0** — Per-item subfolders, auto-extract archives, watch folder, delete from TorBox after download, queue filter bar, 4 bug fixes (startup crash from missing QLineEdit import, stale version number, tarfile deprecation warning, Explorer path quoting)
 
 **v0.6.0** — Multi-link hoster input, update notifications, 5 bug fixes (right-click link always failed, multi-file torrent button stuck as Open, Retry wired to wrong handler, frozen Restart crash, config upgrade dropped column keys)
