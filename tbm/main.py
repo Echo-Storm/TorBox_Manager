@@ -101,11 +101,14 @@ def main():
     # Keeping this comment here as a reminder that AA_EnableHighDpiScaling
     # is not valid in PyQt6 and will raise an AttributeError if used.
 
-    # App icon (window + taskbar) — same asset as tray icon if present
+    # App icon (window + taskbar) — prefer the multi-size ICO so Windows can
+    # pick the right resolution for the taskbar, title bar, and alt-tab switcher.
     _asset_base = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
-    icon_path = os.path.join(_asset_base, "assets", "tray_icon.png")
-    if os.path.isfile(icon_path):
-        app.setWindowIcon(QIcon(icon_path))
+    for _icon_name in ("TorBox_Manager.ico", "tray_icon.png"):
+        _icon_path = os.path.join(_asset_base, "assets", _icon_name)
+        if os.path.isfile(_icon_path):
+            app.setWindowIcon(QIcon(_icon_path))
+            break
 
     # Don't quit when the last window is hidden (we hide to tray on close)
     app.setQuitOnLastWindowClosed(False)

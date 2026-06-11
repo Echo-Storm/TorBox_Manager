@@ -2,6 +2,17 @@
 
 ---
 
+## v0.7.4 — 2026-06-11
+
+### Fixes
+- **Taskbar icon low quality** — the app was loading the 64×64 PNG for the Qt
+  window icon, resulting in a blurry taskbar button and title bar icon at various
+  DPI settings. Now loads the multi-size ICO (16–256px) so Windows picks the
+  correct resolution for each context. ICO also bundled in the exe build so it
+  is available at runtime in the frozen app.
+
+---
+
 ## v0.7.3 — 2026-06-11
 
 ### Fixes
