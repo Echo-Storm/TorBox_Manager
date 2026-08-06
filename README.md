@@ -4,7 +4,7 @@
 
 A desktop queue manager for [TorBox](https://torbox.app) debrid. Add torrents, magnets, hoster links, and NZBs — watch them process on TorBox's servers — download finished files straight to your machine. No browser tab required.
 
-Built for people coming from Real-Debrid who want that same familiar desktop workflow on TorBox.
+Built for people who want that same familiar desktop workflow with TorBox.
 
 ---
 
