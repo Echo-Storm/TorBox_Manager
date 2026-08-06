@@ -97,7 +97,8 @@ class DownloadSignals(QObject):
     finished  = pyqtSignal(str)       # full local file path
     error     = pyqtSignal(str)       # human-readable error string
     status    = pyqtSignal(str)       # log-ready status string
-    cancelled = pyqtSignal()          # user-requested cancel completed cleanly
+    cancelled = pyqtSignal()          # user-requested cancel completed cleanly; .part deleted
+    paused    = pyqtSignal(int, str)  # (bytes_done, part_path); .part kept for a later resume
 
 
 class AddSignals(QObject):
@@ -232,21 +233,32 @@ class DownloadWorker(QRunnable):
         file_name   : optional display name for this specific file within a
                       multi-file torrent. Used in log messages and as the
                       fallback filename if Content-Disposition is absent.
+        resume_from : byte offset to resume from (0 = fresh download). When
+                      set, a Range request is sent and resume_part_path must
+                      also be set — the exact .part file to append to, so the
+                      resumed write can't drift onto a differently-resolved
+                      filename. Falls back to a fresh download automatically
+                      if the server doesn't honor the Range request (no 206).
+        resume_part_path: absolute path to the existing .part file to resume.
 
     NOTE: "torrent" and "magnet" both use the torrent download endpoint.
     The source_type distinction is only for display; the API path is the same.
     """
 
     def __init__(self, api_key: str, item: dict, download_dir: str,
-                 file_id: int = None, file_name: str = None):
+                 file_id: int = None, file_name: str = None,
+                 resume_from: int = 0, resume_part_path: str = None):
         super().__init__()
-        self.api_key      = api_key
-        self.item         = item
-        self.download_dir = download_dir
-        self.file_id      = file_id    # explicit file to download; None for webdl/usenet
-        self.file_name    = file_name  # optional per-file name for multi-file torrents
-        self.signals      = DownloadSignals()
-        self._cancelled   = False
+        self.api_key          = api_key
+        self.item             = item
+        self.download_dir     = download_dir
+        self.file_id          = file_id    # explicit file to download; None for webdl/usenet
+        self.file_name        = file_name  # optional per-file name for multi-file torrents
+        self.resume_from      = resume_from
+        self.resume_part_path = resume_part_path
+        self.signals          = DownloadSignals()
+        self._cancelled       = False
+        self._paused          = False
 
     def cancel(self):
         """
@@ -256,6 +268,15 @@ class DownloadWorker(QRunnable):
         .part file left behind).
         """
         self._cancelled = True
+
+    def pause(self):
+        """
+        Request a pause. Like cancel(), only sets a flag checked between
+        chunks — but the .part file is kept on disk (not deleted) so a later
+        DownloadWorker can resume it via resume_from/resume_part_path instead
+        of starting over.
+        """
+        self._paused = True
 
     # ------------------------------------------------------------------
     # Main entry point
@@ -352,30 +373,55 @@ class DownloadWorker(QRunnable):
 
         Uses a .part file during download; renames on completion.
         Emits progress(bytes_received, total_bytes) as chunks arrive.
-        Emits finished(file_path) on success or error(msg) on failure.
+        Emits finished(file_path) on success, error(msg) on failure,
+        cancelled() if the user cancelled, or paused(bytes_done, part_path)
+        if the user paused.
         """
+        attempting_resume = self.resume_from > 0 and self.resume_part_path
+        headers = {"Range": f"bytes={self.resume_from}-"} if attempting_resume else {}
+
         try:
-            response = requests.get(url, stream=True, timeout=60)
+            response = requests.get(url, stream=True, timeout=60, headers=headers)
             response.raise_for_status()
         except requests.exceptions.RequestException as exc:
             self.signals.error.emit(f"Download failed for '{fallback_name}': {exc}")
             return
 
-        # Determine filename — prefer Content-Disposition, fall back to item name
-        final_name = self._extract_filename(response, fallback_name)
-        part_path  = os.path.join(self.download_dir, final_name + ".part")
-        final_path = os.path.join(self.download_dir, final_name)
+        # A Range request only actually resumes if the server answers 206.
+        # Some hosts/CDNs ignore Range and send the full file back with 200 —
+        # in that case fall back to a fresh download rather than appending
+        # server-sent bytes-from-zero onto our already-partial file.
+        resuming = attempting_resume and response.status_code == 206
 
-        # Total size may be absent — progress will pulse if so
-        total_bytes    = int(response.headers.get("Content-Length", 0))
-        received_bytes = 0
+        if attempting_resume and not resuming:
+            self.signals.status.emit(
+                f"Server didn't support resuming '{fallback_name}' — restarting from the beginning."
+            )
+
+        if resuming:
+            final_name     = os.path.basename(self.resume_part_path)[:-len(".part")]
+            part_path      = self.resume_part_path
+            final_path     = os.path.join(self.download_dir, final_name)
+            received_bytes = self.resume_from
+            total_bytes    = self._parse_content_range_total(response) or (
+                self.resume_from + int(response.headers.get("Content-Length", 0))
+            ) or int(self.item.get("size", 0))
+            file_mode      = "ab"
+        else:
+            # Determine filename — prefer Content-Disposition, fall back to item name
+            final_name     = self._extract_filename(response, fallback_name)
+            part_path      = os.path.join(self.download_dir, final_name + ".part")
+            final_path     = os.path.join(self.download_dir, final_name)
+            received_bytes = 0
+            total_bytes    = int(response.headers.get("Content-Length", 0))  # may be absent
+            file_mode      = "wb"
 
         self.signals.status.emit(f"Downloading: {final_name}")
 
         try:
-            with open(part_path, "wb") as fh:
+            with open(part_path, file_mode) as fh:
                 for chunk in response.iter_content(chunk_size=DOWNLOAD_CHUNK_SIZE):
-                    if self._cancelled:
+                    if self._cancelled or self._paused:
                         break
                     if chunk:
                         fh.write(chunk)
@@ -383,17 +429,21 @@ class DownloadWorker(QRunnable):
                         self.signals.progress.emit(received_bytes, total_bytes)
         except OSError as exc:
             self.signals.error.emit(f"Could not write file '{final_name}': {exc}")
-            try:
-                os.remove(part_path)
-            except OSError:
-                pass
+            # Only discard the .part file for a fresh attempt — a resumed
+            # attempt's partial bytes are still worth keeping for next time.
+            if not resuming:
+                try:
+                    os.remove(part_path)
+                except OSError:
+                    pass
             return
         except requests.exceptions.RequestException as exc:
             self.signals.error.emit(f"Download interrupted for '{final_name}': {exc}")
-            try:
-                os.remove(part_path)
-            except OSError:
-                pass
+            if not resuming:
+                try:
+                    os.remove(part_path)
+                except OSError:
+                    pass
             return
         finally:
             response.close()
@@ -405,6 +455,11 @@ class DownloadWorker(QRunnable):
                 pass
             self.signals.status.emit(f"Download cancelled: {final_name}")
             self.signals.cancelled.emit()
+            return
+
+        if self._paused:
+            self.signals.status.emit(f"Download paused: {final_name}")
+            self.signals.paused.emit(received_bytes, part_path)
             return
 
         # Rename .part -> final only after a clean write
@@ -424,6 +479,22 @@ class DownloadWorker(QRunnable):
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _parse_content_range_total(response: requests.Response):
+        """
+        Parse the total size out of a 206 response's Content-Range header
+        (format: "bytes start-end/total"). Returns None if absent/unparseable
+        so the caller can fall back to other size sources.
+        """
+        header = response.headers.get("Content-Range", "")
+        match = re.search(r"/(\d+)\s*$", header)
+        if match:
+            try:
+                return int(match.group(1))
+            except ValueError:
+                return None
+        return None
 
     @staticmethod
     def _extract_filename(response: requests.Response, fallback: str) -> str:
@@ -554,6 +625,34 @@ class UpdateCheckWorker(QRunnable):
             self.signals.update_available.emit(data["latest"], data["url"])
         else:
             self.signals.up_to_date.emit()
+
+
+class UserInfoSignals(QObject):
+    finished = pyqtSignal(dict)  # raw account data dict from TorBox
+    error    = pyqtSignal(str)
+
+
+class UserInfoWorker(QRunnable):
+    """
+    One-shot worker that fetches TorBox account/plan info.
+
+    Emits finished(data) with whatever fields TorBox returned — the UI slot
+    is responsible for treating every field as optional — or error(reason)
+    on failure. Not surfaced loudly on error; the account panel just shows
+    placeholders.
+    """
+
+    def __init__(self, api_key: str):
+        super().__init__()
+        self.signals = UserInfoSignals()
+        self._api_key = api_key
+
+    def run(self):
+        result = api.get_account_info(self._api_key)
+        if result.get("success") and isinstance(result.get("data"), dict):
+            self.signals.finished.emit(result["data"])
+        else:
+            self.signals.error.emit(result.get("detail", "Could not fetch account info"))
 
 
 # ---------------------------------------------------------------------------

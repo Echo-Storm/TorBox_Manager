@@ -1,0 +1,24 @@
+<svg width="1200" height="220" viewBox="0 0 1200 220" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="TorBox Manager — EchoStorm Edition">
+  <defs>
+    <linearGradient id="fade" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#4a6b28" stop-opacity="0"/>
+      <stop offset="50%" stop-color="#4a6b28" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#4a6b28" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1200" height="220" fill="#181818"/>
+  <rect x="0" y="0" width="1200" height="3" fill="#7cb342"/>
+  <rect x="0" y="217" width="1200" height="3" fill="#7cb342"/>
+
+  <!-- decorative accent lines flanking the wordmark, echoing the app's own header bar -->
+  <rect x="60" y="109" width="270" height="1.5" fill="url(#fade)"/>
+  <rect x="870" y="109" width="270" height="1.5" fill="url(#fade)"/>
+
+  <!-- glyph — same fallback tray-icon character the app itself uses -->
+  <text x="600" y="76" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="34" font-weight="700" fill="#7cb342">▼</text>
+
+  <text x="600" y="132" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="54" font-weight="800" letter-spacing="10" fill="#e8e8e8">TORBOX MANAGER</text>
+
+  <text x="600" y="168" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" letter-spacing="6" fill="#4a6b28">ECHOSTORM EDITION</text>
+</svg>

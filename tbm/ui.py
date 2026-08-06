@@ -25,12 +25,13 @@ import os
 import re
 import shutil
 import sys
+import time
 from urllib.parse import unquote
 import webbrowser
 from datetime import datetime
 
 from PyQt6.QtCore    import Qt, QFileSystemWatcher, QThreadPool, QTimer
-from PyQt6.QtGui     import QAction, QBrush, QColor, QFont
+from PyQt6.QtGui     import QAction, QBrush, QColor, QFont, QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
     QApplication,
     QDialog,
@@ -102,6 +103,7 @@ from constants import (
     FONT_UI_SIZE,
     GITHUB_RELEASES_URL,
     KOFI_URL,
+    PLAN_LABELS,
     STATUS_DOWNLOADING,
     STATUS_ERROR,
     STATUS_FETCHING,
@@ -111,7 +113,7 @@ from constants import (
     TYPE_LABELS,
 )
 from dialogs  import AboutDialog, AddLinkDialog, AddMagnetDialog, FilePickerDialog, SettingsDialog
-from worker   import AddWorker, DeleteWorker, DownloadWorker, ExtractWorker, LinkRequestWorker, PollWorker, UpdateCheckWorker
+from worker   import AddWorker, DeleteWorker, DownloadWorker, ExtractWorker, LinkRequestWorker, PollWorker, UpdateCheckWorker, UserInfoWorker
 
 
 # ---------------------------------------------------------------------------
@@ -458,6 +460,17 @@ def _fmt_added(iso_str: str) -> str:
         return iso_str[:16]
 
 
+def _fmt_full_date(iso_str: str) -> str:
+    """Convert an ISO8601 timestamp to a full local date (e.g. 'Jan 15, 2027')."""
+    if not iso_str:
+        return "—"
+    try:
+        dt = datetime.fromisoformat(str(iso_str).replace("Z", "+00:00"))
+        return dt.astimezone().strftime("%b %d, %Y")
+    except (ValueError, OSError, TypeError):
+        return str(iso_str)[:10]
+
+
 def _make_badge(source_type: str) -> QLabel:
     """Return a styled QLabel badge for the Type column."""
     label_text = TYPE_ICONS.get(source_type, "?") + "  " + TYPE_LABELS.get(source_type, source_type.capitalize())
@@ -540,6 +553,27 @@ class MainWindow(QMainWindow):
         # Row is dropped after a few consecutive misses rather than lingering
         # forever or being dropped on a single transient blip.
         self._missing_polls: dict[str, int] = {}
+        # Paused local downloads awaiting a Resume click — key -> resume metadata
+        # {"part_path", "bytes_done", "download_dir", "file_id", "file_name"}.
+        # TorBox has no concept of a locally-paused download, so rows here are
+        # shielded from the normal poll-driven button/progress-bar refresh.
+        self._paused_downloads: dict[str, dict] = {}
+        # Row keys with a local download error (Retry showing) — tracked
+        # explicitly so "Retry All Failed" doesn't need to sniff button text.
+        self._download_errors: set[str] = set()
+        # Latest known (bytes_received, total_bytes) per actively-downloading
+        # key, from the last progress signal — feeds the status bar's
+        # aggregate speed/remaining-size display. For multi-file torrents
+        # this reflects whichever worker last emitted, same simplification
+        # already used for the per-row progress bar.
+        self._progress_bytes:  dict[str, int] = {}
+        self._progress_totals: dict[str, int] = {}
+        self._last_speed_snapshot = None  # (timestamp, total_bytes) or None
+        self._speed_timer = QTimer(self)
+        self._speed_timer.setInterval(1000)
+        self._speed_timer.timeout.connect(self._update_speed_display)
+        self._speed_timer.start()
+        self._account_fetch_in_flight = False
         # All log lines stored as (level, formatted_string) for filter re-render
         self._log_lines: list[tuple[str, str]] = []
         # Watch folder state
@@ -550,6 +584,8 @@ class MainWindow(QMainWindow):
         self._build_tray()
         self._setup_timer()
         self._setup_watcher()
+        self._setup_shortcuts()
+        self._apply_startup_setting()
 
         # Open Settings immediately if API key is missing
         if not is_configured(self.config):
@@ -818,7 +854,36 @@ class MainWindow(QMainWindow):
         clear_all_btn.clicked.connect(self._on_clear_all)
         layout.addWidget(clear_all_btn)
 
+        retry_all_btn = QPushButton("⟳  Retry All Failed")
+        retry_all_btn.setMinimumHeight(28)
+        retry_all_btn.clicked.connect(self._on_retry_all_failed)
+        layout.addWidget(retry_all_btn)
+
         layout.addStretch()
+
+        # ---- ACCOUNT ----
+        layout.addWidget(_section_label("  Account"))
+
+        account_box = QWidget()
+        account_box.setStyleSheet("background: transparent;")
+        account_layout = QVBoxLayout(account_box)
+        account_layout.setContentsMargins(10, 0, 10, 6)
+        account_layout.setSpacing(2)
+
+        self._account_plan_label = QLabel("Plan: —")
+        self._account_plan_label.setStyleSheet(
+            f"color: {COLOR_TEXT_MUTED}; font-size: 8pt; background: transparent; border: none;"
+        )
+        account_layout.addWidget(self._account_plan_label)
+
+        self._account_expiry_label = QLabel("")
+        self._account_expiry_label.setStyleSheet(
+            f"color: {COLOR_TEXT_MUTED}; font-size: 8pt; background: transparent; border: none;"
+        )
+        self._account_expiry_label.setWordWrap(True)
+        account_layout.addWidget(self._account_expiry_label)
+
+        layout.addWidget(account_box)
 
         # ---- SETTINGS — differentiated bottom button ----
         settings_btn = QPushButton("⚙   Settings")
@@ -1280,9 +1345,21 @@ class MainWindow(QMainWindow):
                 menu.addAction(open_action)
 
         if key in self._downloading:
+            pause_action = QAction("Pause Download", self)
+            pause_action.triggered.connect(lambda: self._pause_download(key))
+            menu.addAction(pause_action)
+
             cancel_action = QAction("Cancel Download", self)
             cancel_action.triggered.connect(lambda: self._cancel_download(key))
             menu.addAction(cancel_action)
+        elif key in self._paused_downloads:
+            resume_action = QAction("Resume Download", self)
+            resume_action.triggered.connect(lambda: self._resume_download(key))
+            menu.addAction(resume_action)
+
+            discard_action = QAction("Discard Paused Download", self)
+            discard_action.triggered.connect(lambda: self._discard_paused_download(key))
+            menu.addAction(discard_action)
 
         menu.exec(self._table.viewport().mapToGlobal(pos))
 
@@ -1304,6 +1381,15 @@ class MainWindow(QMainWindow):
         download_action = QAction(f"Download Selected ({len(keys)})", self)
         download_action.triggered.connect(lambda: self._bulk_download(keys))
         menu.addAction(download_action)
+
+        ready_keys = [
+            k for k in keys
+            if k in self._row_items and _torbox_state_to_status(self._row_items[k]) == STATUS_READY
+        ]
+        if ready_keys:
+            copy_links_action = QAction(f"Copy Download Links ({len(ready_keys)})", self)
+            copy_links_action.triggered.connect(lambda: self._bulk_copy_links(ready_keys))
+            menu.addAction(copy_links_action)
 
         delete_action = QAction(f"Delete Selected ({len(keys)})", self)
         delete_action.triggered.connect(lambda: self._bulk_delete(keys))
@@ -1342,6 +1428,44 @@ class MainWindow(QMainWindow):
             return
         for key, item in targets:
             self._delete_item(key, item)
+
+    def _bulk_copy_links(self, keys: list):
+        """
+        Resolve a time-limited download link for each selected Ready item
+        and, once every request has returned (success or failure), join
+        whatever resolved into one clipboard paste — one link per line, in
+        selection order.
+        """
+        results = {}
+        pending = {"count": len(keys)}
+
+        def _on_one_done(k, url=None):
+            results[k] = url
+            pending["count"] -= 1
+            if pending["count"] > 0:
+                return
+            links = [results[k] for k in keys if results.get(k)]
+            failed = len(keys) - len(links)
+            if links:
+                QApplication.clipboard().setText("\n".join(links))
+            msg = f"Copied {len(links)} download link(s) to clipboard"
+            if failed:
+                msg += f" — {failed} failed to resolve"
+            self._log(msg)
+            self._set_status(msg)
+
+        self._log(f"Requesting {len(keys)} download link(s)…")
+        for key in keys:
+            item = self._row_items.get(key)
+            if not item:
+                _on_one_done(key)
+                continue
+            worker = LinkRequestWorker(self.config.get("api_key", ""), item)
+            worker.signals.finished.connect(lambda url, k=key: _on_one_done(k, url=url))
+            worker.signals.error.connect(
+                lambda msg, k=key: (self._log(f"Link request failed: {msg}", "WARN"), _on_one_done(k))
+            )
+            self._pool.start(worker)
 
     def _request_link(self, item: dict, action: str):
         """Dispatch a LinkRequestWorker; on success copy URL or open in browser."""
@@ -1514,6 +1638,15 @@ class MainWindow(QMainWindow):
         )
         bar_layout.addWidget(self._status_label, stretch=1)
 
+        # Live aggregate speed / remaining-size while downloads are active
+        self._speed_label = QLabel("")
+        self._speed_label.setStyleSheet(
+            f"color: {COLOR_ACCENT}; font-size: 8pt; background: transparent; "
+            f"border: none; padding-right: 8px;"
+        )
+        self._speed_label.hide()
+        bar_layout.addWidget(self._speed_label)
+
         # Update available button — hidden until an update is detected
         self._update_btn = QPushButton("⬆  Update available")
         self._update_btn.setFixedHeight(22)
@@ -1622,16 +1755,19 @@ class MainWindow(QMainWindow):
 
         open_action    = QAction("Open",    self)
         about_action   = QAction("About",   self)
+        config_action  = QAction("Open Config Folder", self)
         restart_action = QAction("Restart", self)
         quit_action    = QAction("Quit",    self)
 
         open_action.triggered.connect(self._tray_show)
         about_action.triggered.connect(self._on_about)
+        config_action.triggered.connect(self._on_open_config_folder)
         restart_action.triggered.connect(self._tray_restart)
         quit_action.triggered.connect(self._tray_quit)
 
         menu.addAction(open_action)
         menu.addAction(about_action)
+        menu.addAction(config_action)
         menu.addSeparator()
         menu.addAction(restart_action)
         menu.addAction(quit_action)
@@ -1651,6 +1787,50 @@ class MainWindow(QMainWindow):
             QTimer.singleShot(500, self._submit_poll)
         # Check for updates a few seconds after startup — silent, background only
         QTimer.singleShot(3000, self._check_for_update)
+        QTimer.singleShot(1500, self._fetch_account_info)
+
+    def _setup_shortcuts(self):
+        """
+        Window-level keyboard shortcuts for the Queue tab.
+
+        Deliberately window-scoped rather than attached to the table itself:
+        the queue table has setFocusPolicy(NoFocus) (no focus rectangle, by
+        design), so a table-scoped shortcut would never fire. Qt's standard
+        ShortcutOverride protocol means these still yield to a focused
+        QLineEdit's own Ctrl+A/Delete handling (e.g. the queue filter box),
+        so typing in the filter still works normally.
+        """
+        delete_sc = QShortcut(QKeySequence(Qt.Key.Key_Delete), self)
+        delete_sc.activated.connect(self._on_delete_shortcut)
+
+        select_all_sc = QShortcut(QKeySequence.StandardKey.SelectAll, self)
+        select_all_sc.activated.connect(self._on_select_all_shortcut)
+
+        refresh_sc = QShortcut(QKeySequence(Qt.Key.Key_F5), self)
+        refresh_sc.activated.connect(self._on_refresh)
+
+    def _on_delete_shortcut(self):
+        """Delete key — remove whatever's selected in the Queue tab."""
+        if self._tabs.currentIndex() != 0:
+            return
+        keys = []
+        for row in sorted({idx.row() for idx in self._table.selectionModel().selectedRows()}):
+            cell = self._table.item(row, COL_NAME)
+            k = cell.data(Qt.ItemDataRole.UserRole) if cell else None
+            if k:
+                keys.append(k)
+        if not keys:
+            return
+        if len(keys) == 1:
+            self._on_delete_clicked(keys[0])
+        else:
+            self._bulk_delete(keys)
+
+    def _on_select_all_shortcut(self):
+        """Ctrl+A — select every row in the Queue tab."""
+        if self._tabs.currentIndex() != 0:
+            return
+        self._table.selectAll()
 
     # -----------------------------------------------------------------------
     # Add button slots
@@ -1750,6 +1930,7 @@ class MainWindow(QMainWindow):
             key for key, item in self._row_items.items()
             if _torbox_state_to_status(item) == STATUS_READY
             and key not in self._downloading
+            and key not in self._paused_downloads
         ]
         for key in keys_to_remove:
             self._remove_row(key)
@@ -1759,10 +1940,11 @@ class MainWindow(QMainWindow):
         """
         Remove all rows from the local display (does not delete from TorBox).
 
-        Rows with an active local download are preserved — clearing them would
-        orphan the running DownloadWorker's item lookup (_row_items), which
-        previously caused the completed download to be recorded in history
-        with a blank name.
+        Rows with an active or paused local download are preserved — clearing
+        an active one would orphan the running DownloadWorker's item lookup
+        (_row_items), which previously caused the completed download to be
+        recorded in history with a blank name; clearing a paused one would
+        silently strand its .part file with no way to resume it from the UI.
         """
         if self._table.rowCount() == 0:
             return
@@ -1771,17 +1953,32 @@ class MainWindow(QMainWindow):
             "Clear All",
             "Clear all items from the queue display?\n\n"
             "This only affects the local view — items are not removed from "
-            "TorBox. Downloads currently in progress are left alone.",
+            "TorBox. Downloads currently in progress or paused are left alone.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
         if reply != QMessageBox.StandardButton.Yes:
             return
 
-        keys_to_remove = [k for k in list(self._row_items) if k not in self._downloading]
+        keep = lambda k: k in self._downloading or k in self._paused_downloads
+        keys_to_remove = [k for k in list(self._row_items) if not keep(k)]
         for key in keys_to_remove:
             self._remove_row(key)
-        self._download_queue = [(k, i) for k, i in self._download_queue if k in self._downloading]
+        self._download_queue = [(k, i) for k, i in self._download_queue if keep(k)]
         self._log(f"Cleared {len(keys_to_remove)} row(s) from display.")
+
+    def _on_retry_all_failed(self):
+        """Re-attempt every row currently showing a local download error."""
+        candidates = [
+            (key, self._row_items[key]) for key in self._download_errors
+            if key in self._row_items
+            and key not in self._downloading and key not in self._paused_downloads
+        ]
+        if not candidates:
+            self._log("No failed downloads to retry.", "INFO")
+            return
+        for key, item in candidates:
+            self._start_download(key, item)
+        self._log(f"Retrying {len(candidates)} failed download(s).")
 
     def _on_download_all(self):
         """Queue every Ready row for download, respecting the concurrency limit."""
@@ -1860,9 +2057,49 @@ class MainWindow(QMainWindow):
                 self._log("Settings updated in memory but could not save to disk.", "WARN")
             self._update_poll_interval()
             self._setup_watcher()
+            self._apply_startup_setting()
+            self._fetch_account_info()
 
     def _on_about(self):
         AboutDialog(self).exec()
+
+    def _apply_startup_setting(self):
+        """
+        Sync the HKCU Run-key entry with the current run_at_startup config
+        value. Called on every launch (self-healing — keeps the registered
+        path current if the exe was moved) and again right after Settings
+        is saved. Windows-only (winreg), matching this app's Windows 10/11
+        scope. Best-effort: failures are logged, never raised to the user.
+        """
+        import winreg
+
+        value_name   = "TorBoxManagerEchoStorm"
+        want_enabled = self.config.get("run_at_startup", False)
+
+        if getattr(sys, "frozen", False):
+            command = f'"{sys.executable}"'
+        else:
+            here      = os.path.dirname(os.path.abspath(__file__))
+            main_path = os.path.join(here, "main.py")
+            pyw       = os.path.join(os.path.dirname(sys.executable), "pythonw.exe")
+            exe       = pyw if os.path.isfile(pyw) else sys.executable
+            command   = f'"{exe}" "{main_path}"'
+
+        try:
+            with winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER,
+                r"Software\Microsoft\Windows\CurrentVersion\Run",
+                0, winreg.KEY_SET_VALUE,
+            ) as key:
+                if want_enabled:
+                    winreg.SetValueEx(key, value_name, 0, winreg.REG_SZ, command)
+                else:
+                    try:
+                        winreg.DeleteValue(key, value_name)
+                    except FileNotFoundError:
+                        pass
+        except OSError as exc:
+            self._log(f"Could not update startup registry entry: {exc}", "WARN")
 
     # -----------------------------------------------------------------------
     # Update check
@@ -1887,6 +2124,49 @@ class MainWindow(QMainWindow):
             pass
         self._update_btn.clicked.connect(lambda: webbrowser.open(url))
         self._update_btn.show()
+
+    # -----------------------------------------------------------------------
+    # Account info
+    # -----------------------------------------------------------------------
+
+    def _fetch_account_info(self):
+        """
+        Dispatch a UserInfoWorker. Silent on failure — labels just keep
+        showing their placeholder. Guarded against overlap: this is only
+        triggered from startup and Settings-save, but if both happened to
+        land close together, two in-flight fetches could return out of
+        order and leave the panel showing the stale one.
+        """
+        api_key = self.config.get("api_key", "")
+        if not api_key or self._account_fetch_in_flight:
+            return
+        self._account_fetch_in_flight = True
+        worker = UserInfoWorker(api_key)
+        worker.signals.finished.connect(self._on_account_info_finished)
+        worker.signals.error.connect(self._on_account_info_error)
+        self._pool.start(worker)
+
+    def _on_account_info_error(self, msg: str):
+        self._account_fetch_in_flight = False
+        self._log(f"Account info: {msg}", "WARN")
+
+    def _on_account_info_finished(self, data: dict):
+        """
+        Render whatever TorBox returned. Every field is optional — the exact
+        /user/me shape isn't verified against a live account of every plan
+        tier, so missing/unexpected fields just fall back to a placeholder
+        instead of raising.
+        """
+        self._account_fetch_in_flight = False
+        plan = data.get("plan")
+        if plan is not None:
+            plan_label = PLAN_LABELS.get(plan, f"Plan {plan}")
+        else:
+            plan_label = "—"
+        self._account_plan_label.setText(f"Plan: {plan_label}")
+
+        expires = data.get("premium_expires_at") or data.get("plan_expires_at")
+        self._account_expiry_label.setText(f"Expires: {_fmt_full_date(expires)}" if expires else "")
 
     # -----------------------------------------------------------------------
     # Polling
@@ -1990,7 +2270,7 @@ class MainWindow(QMainWindow):
         # so one slow/partial API response doesn't drop a valid row.
         stale_keys = set(self._row_items) - seen_keys - self._deleted_keys
         for key in stale_keys:
-            if key in self._downloading:
+            if key in self._downloading or key in self._paused_downloads:
                 self._missing_polls.pop(key, None)
                 continue
             misses = self._missing_polls.get(key, 0) + 1
@@ -2167,8 +2447,11 @@ class MainWindow(QMainWindow):
         if size_cell:
             size_cell.setText(_fmt_size(item.get("size", 0)))
 
-        # Update progress bar (only if not currently fetching locally)
-        if key not in self._downloading:
+        # Update progress bar (only if not currently fetching locally, and not
+        # showing a locally-paused download — TorBox has no concept of that
+        # pause, so its status/progress fields would otherwise stomp it back
+        # to a plain "Ready" bar on the very next poll)
+        if key not in self._downloading and key not in self._paused_downloads:
             pbar = self._table.cellWidget(row, COL_PROGRESS)
             if isinstance(pbar, QProgressBar):
                 # Reset to determinate range first so setValue() isn't silently
@@ -2179,7 +2462,7 @@ class MainWindow(QMainWindow):
 
         # Enable/disable download button; show Retry on error rows
         dl_btn = self._table.cellWidget(row, COL_DOWNLOAD)
-        if isinstance(dl_btn, QPushButton) and key not in self._downloading:
+        if isinstance(dl_btn, QPushButton) and key not in self._downloading and key not in self._paused_downloads:
             if status == STATUS_ERROR:
                 # Always disconnect before setting Retry — the button may have
                 # been "Open" (wired to _open_in_explorer) if this row had a
@@ -2236,6 +2519,17 @@ class MainWindow(QMainWindow):
         """Remove a row from the table and rebuild the row index."""
         row = self._find_row(key)
         self._row_index.pop(key, None)
+        self._download_errors.discard(key)
+
+        # A paused download has no future Resume path once its row is gone —
+        # clean up the .part file rather than leaving it orphaned on disk.
+        paused = self._paused_downloads.pop(key, None)
+        if paused:
+            try:
+                os.remove(paused["part_path"])
+            except OSError:
+                pass
+
         if row is None:
             return
         self._table.removeRow(row)
@@ -2290,6 +2584,34 @@ class MainWindow(QMainWindow):
 
         self._row_index.pop(key, None)
         return None
+
+    def _reset_download_button(self, dl_btn: QPushButton, key: str, status: str):
+        """
+        Rewire a row's Download button for the "no longer actively
+        downloading" state, based on the item's current TorBox status.
+
+        Always disconnects first — the button may currently be wired to
+        _open_in_explorer from a prior successful local download, same
+        reasoning as _on_download_error's existing Retry-wiring. Shared by
+        _on_download_cancelled and _discard_paused_download so a row whose
+        TorBox-side status changed to Error while the local download was
+        paused/cancelled correctly shows "Retry" rather than a disabled
+        "Download" — a two-way Ready/not-Ready check would miss that.
+        """
+        try:
+            dl_btn.clicked.disconnect()
+        except RuntimeError:
+            pass
+        dl_btn.clicked.connect(lambda checked, k=key: self._on_download_clicked(k))
+        if status == STATUS_ERROR:
+            dl_btn.setText("Retry")
+            dl_btn.setEnabled(True)
+        elif status == STATUS_READY:
+            dl_btn.setText("Download")
+            dl_btn.setEnabled(True)
+        else:
+            dl_btn.setText("Download")
+            dl_btn.setEnabled(False)
 
     @staticmethod
     def _apply_status_color(cell, status: str):
@@ -2407,7 +2729,8 @@ class MainWindow(QMainWindow):
         )
 
     def _dispatch_download_worker(self, key: str, item: dict, download_dir: str,
-                                   file_id, file_name):
+                                   file_id, file_name, resume_from: int = 0,
+                                   resume_part_path: str = None):
         """
         Submit a single DownloadWorker to the thread pool.
 
@@ -2418,14 +2741,22 @@ class MainWindow(QMainWindow):
         Note: for multi-file torrents, multiple workers share the same row key.
         The progress bar reflects the last worker to emit a signal — this is
         acceptable for now. A per-file sub-row is a future improvement if needed.
+
+        resume_from/resume_part_path: set by _resume_download() to continue an
+        existing .part file. When resuming, the per-item subfolder is skipped —
+        resume_part_path is already inside the correct folder from the original
+        attempt, and `download_dir` is expected to already be that same folder.
         """
         self._downloading[key] = self._downloading.get(key, 0) + 1
+        self._download_errors.discard(key)
         display_name = file_name or item.get("name", key)
-        self._log(f"Starting download: {display_name}")
-        self._set_status(f"Downloading: {display_name}")
+        resuming = bool(resume_from and resume_part_path)
+        self._log(f"{'Resuming' if resuming else 'Starting'} download: {display_name}")
+        self._set_status(f"{'Resuming' if resuming else 'Downloading'}: {display_name}")
 
-        # Per-item subfolder — create once; idempotent for multi-file torrents
-        if self.config.get("create_subfolder", True):
+        # Per-item subfolder — create once; idempotent for multi-file torrents.
+        # Skipped on resume: download_dir is already the resolved subfolder.
+        if not resuming and self.config.get("create_subfolder", True):
             raw = item.get("name", "download")
             folder_name = re.sub(r'[\\/:*?"<>|]', "_", raw).strip(". ") or "download"
             download_dir = os.path.join(download_dir, folder_name)
@@ -2447,11 +2778,13 @@ class MainWindow(QMainWindow):
                 dl_btn.setEnabled(False)
 
         worker = DownloadWorker(
-            api_key      = self.config.get("api_key", ""),
-            item         = item,
-            download_dir = download_dir,
-            file_id      = file_id,
-            file_name    = file_name,
+            api_key          = self.config.get("api_key", ""),
+            item             = item,
+            download_dir     = download_dir,
+            file_id          = file_id,
+            file_name        = file_name,
+            resume_from      = resume_from,
+            resume_part_path = resume_part_path,
         )
         self._active_downloads.setdefault(key, []).append(worker)
         worker.signals.progress.connect(
@@ -2466,11 +2799,15 @@ class MainWindow(QMainWindow):
         worker.signals.cancelled.connect(
             lambda k=key, w=worker: (self._untrack_worker(k, w), self._on_download_cancelled(k))
         )
+        worker.signals.paused.connect(
+            lambda bytes_done, part_path, k=key, w=worker, dd=download_dir, fid=file_id, fname=file_name:
+                (self._untrack_worker(k, w), self._on_download_paused(k, bytes_done, part_path, dd, fid, fname))
+        )
         worker.signals.status.connect(self._set_status)
         self._pool.start(worker)
 
     def _untrack_worker(self, key: str, worker):
-        """Remove a finished/errored/cancelled worker from _active_downloads."""
+        """Remove a finished/errored/cancelled/paused worker from _active_downloads."""
         lst = self._active_downloads.get(key)
         if lst and worker in lst:
             lst.remove(worker)
@@ -2487,7 +2824,128 @@ class MainWindow(QMainWindow):
         name = self._row_items.get(key, {}).get("name", key)
         self._log(f"Cancelling download: {name}")
 
+    def _pause_download(self, key: str):
+        """
+        Request a pause of every active DownloadWorker for this row.
+
+        For a multi-file torrent with several workers sharing this key, each
+        one pauses independently and reports back via its own `paused` signal;
+        _on_download_paused only stashes resume metadata for whichever worker
+        happens to report last (same simplification already used for cancel
+        and progress display on multi-file rows).
+        """
+        workers = self._active_downloads.get(key, [])
+        if not workers:
+            return
+        for w in list(workers):
+            w.pause()
+        name = self._row_items.get(key, {}).get("name", key)
+        self._log(f"Pausing download: {name}")
+
+    def _on_download_paused(self, key: str, bytes_done: int, part_path: str,
+                             download_dir: str, file_id, file_name):
+        """Slot for DownloadWorker.signals.paused — stash resume metadata and
+        flip the row into a Resume-able state."""
+        count = self._downloading.get(key, 1) - 1
+        if count > 0:
+            self._downloading[key] = count
+        else:
+            self._downloading.pop(key, None)
+            self._progress_bytes.pop(key, None)
+            self._progress_totals.pop(key, None)
+        self._try_start_queued()
+        self._update_poll_interval()
+
+        name = self._row_items.get(key, {}).get("name", key)
+        self._log(f"Download paused: {name} ({_fmt_size(bytes_done)} so far)")
+        self._set_status("Download paused")
+
+        # If other files from the same multi-file torrent are still active,
+        # leave the row's progress/button/paused-metadata state to whichever
+        # of them reports last — same "last worker wins" simplification the
+        # progress bar already uses. Stashing resume metadata here early
+        # (before all workers have stopped) would let it describe the wrong
+        # file for the brief window until the others finish too.
+        if key in self._downloading:
+            return
+
+        self._paused_downloads[key] = {
+            "part_path":    part_path,
+            "bytes_done":   bytes_done,
+            "download_dir": download_dir,
+            "file_id":      file_id,
+            "file_name":    file_name,
+        }
+
+        row = self._find_row(key)
+        if row is None:
+            return
+        pbar = self._table.cellWidget(row, COL_PROGRESS)
+        if isinstance(pbar, QProgressBar):
+            pbar.setRange(0, 100)
+            pbar.setFormat("Paused")
+            pbar.setStyleSheet(
+                "QProgressBar { background-color: #2e2a1a; border: 1px solid #8b7530; "
+                "border-radius: 2px; text-align: center; color: #d0b050; font-size: 7pt; }"
+                "QProgressBar::chunk { background-color: #8b7530; }"
+            )
+        dl_btn = self._table.cellWidget(row, COL_DOWNLOAD)
+        if isinstance(dl_btn, QPushButton):
+            try:
+                dl_btn.clicked.disconnect()
+            except RuntimeError:
+                pass
+            dl_btn.clicked.connect(lambda checked, k=key: self._resume_download(k))
+            dl_btn.setText("Resume")
+            dl_btn.setEnabled(True)
+
+    def _resume_download(self, key: str):
+        """Dispatch a new DownloadWorker that continues a paused .part file."""
+        resume = self._paused_downloads.pop(key, None)
+        item = self._row_items.get(key)
+        if not resume or not item:
+            self._log("Cannot resume — the paused download's data is no longer available.", "WARN")
+            return
+        self._dispatch_download_worker(
+            key=key,
+            item=item,
+            download_dir=resume["download_dir"],
+            file_id=resume["file_id"],
+            file_name=resume["file_name"],
+            resume_from=resume["bytes_done"],
+            resume_part_path=resume["part_path"],
+        )
+
+    def _discard_paused_download(self, key: str):
+        """Give up on a paused download — delete its .part file and reset the row."""
+        resume = self._paused_downloads.pop(key, None)
+        if not resume:
+            return
+        try:
+            os.remove(resume["part_path"])
+        except OSError:
+            pass
+        name = self._row_items.get(key, {}).get("name", key)
+        self._log(f"Discarded paused download: {name}")
+
+        row = self._find_row(key)
+        if row is None:
+            return
+        item = self._row_items.get(key, {})
+        status = _torbox_state_to_status(item) if item else STATUS_READY
+        pbar = self._table.cellWidget(row, COL_PROGRESS)
+        if isinstance(pbar, QProgressBar):
+            pbar.setRange(0, 100)
+            pbar.setValue(_parse_progress(item) if item else 0)
+            self._style_progress_bar(pbar, status)
+        dl_btn = self._table.cellWidget(row, COL_DOWNLOAD)
+        if isinstance(dl_btn, QPushButton):
+            self._reset_download_button(dl_btn, key, status)
+
     def _on_download_progress(self, key: str, bytes_recv: int, total_bytes: int):
+        self._progress_bytes[key] = bytes_recv
+        self._progress_totals[key] = total_bytes
+
         row = self._find_row(key)
         if row is None:
             return
@@ -2508,6 +2966,41 @@ class MainWindow(QMainWindow):
             pbar.setRange(0, 0)
             pbar.setFormat("")
 
+    def _update_speed_display(self):
+        """
+        Tick every second: compute aggregate download speed and remaining
+        bytes across all active downloads from the last-known progress
+        snapshot per key, and show it in the status bar. Hidden when nothing
+        is downloading.
+        """
+        active = len(self._downloading)
+        if active == 0:
+            self._speed_label.hide()
+            self._last_speed_snapshot = None
+            return
+
+        now = time.time()
+        total_now = sum(self._progress_bytes.get(k, 0) for k in self._downloading)
+        if self._last_speed_snapshot is not None:
+            last_time, last_total = self._last_speed_snapshot
+            elapsed = now - last_time
+            speed = max(0.0, (total_now - last_total) / elapsed) if elapsed > 0 else 0.0
+        else:
+            speed = 0.0
+        self._last_speed_snapshot = (now, total_now)
+
+        remaining = sum(
+            max(0, total - self._progress_bytes.get(k, 0))
+            for k, total in self._progress_totals.items()
+            if k in self._downloading and total > 0
+        )
+
+        parts = [f"{active} downloading", f"{_fmt_size(int(speed))}/s"]
+        if remaining > 0:
+            parts.append(f"{_fmt_size(remaining)} left")
+        self._speed_label.setText("⇊ " + " · ".join(parts))
+        self._speed_label.show()
+
     def _on_download_finished(self, key: str, file_path: str):
         # Decrement the in-flight counter for this row.
         # For multi-file torrents multiple workers share the same key —
@@ -2517,6 +3010,8 @@ class MainWindow(QMainWindow):
             self._downloading[key] = count
         else:
             self._downloading.pop(key, None)
+            self._progress_bytes.pop(key, None)
+            self._progress_totals.pop(key, None)
         self._try_start_queued()
         self._update_poll_interval()
 
@@ -2595,6 +3090,9 @@ class MainWindow(QMainWindow):
             self._downloading[key] = count
         else:
             self._downloading.pop(key, None)
+            self._progress_bytes.pop(key, None)
+            self._progress_totals.pop(key, None)
+        self._download_errors.add(key)
         self._try_start_queued()
         self._update_poll_interval()
         self._log(f"Download error: {msg}", "ERROR")
@@ -2632,6 +3130,8 @@ class MainWindow(QMainWindow):
             self._downloading[key] = count
         else:
             self._downloading.pop(key, None)
+            self._progress_bytes.pop(key, None)
+            self._progress_totals.pop(key, None)
         self._try_start_queued()
         self._update_poll_interval()
 
@@ -2654,13 +3154,7 @@ class MainWindow(QMainWindow):
             self._style_progress_bar(pbar, status)
         dl_btn = self._table.cellWidget(row, COL_DOWNLOAD)
         if isinstance(dl_btn, QPushButton):
-            try:
-                dl_btn.clicked.disconnect()
-            except RuntimeError:
-                pass
-            dl_btn.clicked.connect(lambda checked, k=key: self._on_download_clicked(k))
-            dl_btn.setText("Download")
-            dl_btn.setEnabled(status == STATUS_READY)
+            self._reset_download_button(dl_btn, key, status)
 
     def _auto_delete_from_torbox(self, key: str, item: dict):
         """Fire a DeleteWorker to remove the item from TorBox after a completed download."""
@@ -2814,6 +3308,16 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
 
+    @staticmethod
+    def _on_open_config_folder():
+        """Open the folder holding config.json, download_history.json, and the log file."""
+        folder = os.path.dirname(sys.executable) if getattr(sys, "frozen", False) \
+            else os.path.dirname(os.path.abspath(__file__))
+        try:
+            os.startfile(folder)
+        except OSError:
+            pass
+
     # -----------------------------------------------------------------------
     # Delete
     # -----------------------------------------------------------------------
@@ -2965,6 +3469,7 @@ class MainWindow(QMainWindow):
     def _tray_restart(self):
         import subprocess
         self._poll_timer.stop()
+        self._speed_timer.stop()
         QApplication.instance().quit()
         # In a frozen PyInstaller exe sys.executable IS the exe, so sys.argv[0]
         # would duplicate it as an argument.  In source mode we need both.
@@ -2976,5 +3481,6 @@ class MainWindow(QMainWindow):
 
     def _tray_quit(self):
         self._poll_timer.stop()
+        self._speed_timer.stop()
         self._tray.hide()
         QApplication.instance().quit()

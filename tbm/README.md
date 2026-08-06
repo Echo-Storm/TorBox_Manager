@@ -1,16 +1,33 @@
-# TorBox Manager — EchoStorm Edition
+<p align="center">
+  <img src="../assets/banner.svg" alt="TorBox Manager — EchoStorm Edition" width="100%">
+</p>
 
-![TorBox Manager](../TorboxManager.jpg)
+<h3 align="center">A focused Windows desktop client for TorBox — nothing more, nothing less.</h3>
 
-A desktop queue manager for [TorBox](https://torbox.app) debrid. Add torrents, magnets, hoster links, and NZBs — watch them process on TorBox's servers — download finished files straight to your machine. No browser tab required.
+<p align="center">
+Add torrents, magnets, hoster links, and NZBs — watch them process on TorBox's servers —
+download finished files straight to your machine. No browser tab required.
+</p>
 
-Built for people coming from Real-Debrid who want that same familiar desktop workflow on TorBox.
+---
+
+## Highlights
+
+- **Pause and resume downloads** — stop a transfer mid-stream and pick it back up later without re-downloading what you already have
+- **One unified queue** — torrents, magnets, hoster links, and NZBs, sorted, filtered, and multi-selected like a spreadsheet
+- **Bulk everything** — select a batch of rows and download, delete, or copy links for all of them at once
+- **Auto-extract, safely** — archives unpack the moment they finish downloading, with path-traversal protection so a malicious archive can't write outside your download folder
+- **Watch folder** — drop a `.torrent` or `.nzb` file into a folder and it's queued automatically, no clicking required
+- **Knows your account** — plan and expiration shown at a glance, so a lapsed subscription doesn't quietly break your queue
+- **Stays out of your way** — lives in the tray, checks in occasionally, and can launch at Windows startup if you want it always running
 
 ---
 
 ## What it looks like
 
-The screenshot above shows the queue in action — torrents, a magnet, a hoster link, and an NZB all managed from one window. The MAME set is actively downloading. Everything else is cached and ready to grab. (Screenshot is from an earlier build; the UI has grown since then.)
+The screenshot below shows the queue in action — torrents, a magnet, a hoster link, and an NZB all managed from one window.
+
+![TorBox Manager](../TorboxManager.jpg)
 
 ---
 
@@ -41,22 +58,25 @@ When the app opens it'll ask for your **API key** and a **download folder**. Fil
 
 ---
 
-## What it does
+## Everything it does
 
 - **Add anything** — magnet links, .torrent files, hoster URLs (1Fichier, Mega, Pixeldrain etc.), and .nzb files
 - **Unified queue** — everything in one table regardless of type, with live status, size, seeds, peers, ETA, and progress bars
-- **Sortable, filterable, multi-select** — click any column header to sort; search bar filters rows by name in real time; Ctrl/Shift-click rows for bulk Download or Delete from the right-click menu
+- **Sortable, filterable, multi-select** — click any column header to sort; search bar filters rows by name in real time; Ctrl/Shift-click rows for bulk Download, Delete, or Copy Links from the right-click menu
 - **Multi-file torrents** — pick exactly which files you want before downloading; one worker per file, all in parallel
-- **Downloads to your folder** — streams directly to disk with a live progress bar; each item gets its own named subfolder automatically; cancel an in-progress download anytime from the right-click menu
+- **Pause, resume, and cancel** — stop a download and either pick it back up later from where it left off, or cancel it outright
+- **Downloads to your folder** — streams directly to disk with a live progress bar and an aggregate speed/remaining-size readout; each item gets its own named subfolder automatically
 - **Auto-extract** — archives (.zip, .rar, .7z, .tar.*) are extracted on a background thread immediately after download, with path-traversal protection against malicious archives; optionally deletes the archive after extraction
 - **Watch folder** — drop .torrent or .nzb files into a folder and they get submitted to TorBox automatically, with a delete-after-submit option
 - **Download history** — every completed download is logged; the History tab shows them all newest-first with double-click to open in Explorer and right-click to copy the path
-- **Controlled downloads** — concurrency limit (default 3) keeps your connection usable; Download All (and bulk-selected downloads) warn first if there isn't enough free disk space, then queue the rest and drain as slots free up
-- **Right-click rows** — Copy Name, Copy Download Link, Open in Browser (hoster links), Cancel Download — right on the row
+- **Controlled downloads** — concurrency limit (default 3) keeps your connection usable; Download All (and bulk-selected downloads) warn first if there isn't enough free disk space, then queue the rest and drain as slots free up; Retry All Failed re-attempts every row that errored
+- **Right-click rows** — Copy Name, Copy Download Link, Open in Browser (hoster links), Pause/Resume/Cancel Download — right on the row
+- **Keyboard shortcuts** — Delete to remove the current selection, Ctrl+A to select every row, F5 to refresh
 - **Multi-link hoster input** — paste a batch of hoster URLs at once, one per line
 - **Duplicate warning** — adding a magnet already in your queue asks first instead of silently double-submitting
+- **Account at a glance** — current plan and expiration shown in the left panel
 - **Update notifications** — checks GitHub Releases silently on startup; a button appears in the status bar if a newer version is out
-- **Stays out of your way** — minimizes to the system tray, slows polling to 5-minute intervals when idle
+- **Stays out of your way** — minimizes to the system tray, slows polling to 5-minute intervals when idle, and can launch automatically at Windows startup
 - **Tray notifications** — optional popup when a download finishes (off by default)
 - **Remembers where you left it** — window position and size restored on every launch
 
@@ -73,6 +93,7 @@ Open via the gear icon bottom-left.
 | Concurrent Downloads | Max simultaneous local downloads | 3 |
 | Poll Interval | How often to check TorBox | 30 seconds |
 | Minimize to Tray | Hide to tray on close instead of quitting | on |
+| Run at Windows Startup | Launch automatically at login | off |
 | Tray Notifications | Popup when a download finishes | off |
 | Create subfolder per download | Each item gets its own named subfolder | on |
 | Auto-extract archives | Extract .zip/.rar/.7z/.tar.* after download | on |
@@ -81,7 +102,8 @@ Open via the gear icon bottom-left.
 | Watch folder | Auto-submit .torrent/.nzb files dropped into a folder | off |
 | Delete from watch folder after submit | Remove the file from the watch folder on success | on |
 
-Config saves to `config.json` next to the exe. Nothing goes to the registry or AppData.
+Config saves to `config.json` next to the exe. Nothing goes to the registry except an
+optional startup entry if you enable "Run at Windows Startup."
 
 ---
 
@@ -92,6 +114,9 @@ That's normal for freshly built executables — Defender scans them on first lau
 
 **My item shows a hash instead of a name (like `694f6fe710f5...`)**
 That's a TorBox thing on some usenet items — it returns the internal hash before it resolves the real name. The app renders those in italic/dimmed text so you know it's a pending resolution, not a bug. The download still works fine, and the name updates on the next poll once TorBox sorts it out.
+
+**If I pause a download and close the app, can I resume it later?**
+The paused file stays on disk (as a `.part` file), but the app doesn't currently remember it was paused across a restart — on next launch the row just looks like a fresh Ready item. Clicking Download again will restart that file from scratch rather than resuming it. Persisting pause state across restarts is on the list for a future release; for now, resume before you close the app if you want to keep the partial progress.
 
 **Where's the log file?**
 `TorBox_Manager_Log.txt` next to the exe. It gets overwritten each launch so it only covers the current session. There's also an in-app log strip at the bottom of the window with an "errors only" filter.
@@ -108,6 +133,14 @@ These need optional packages — `rarfile` (+ unrar.exe or WinRAR in PATH for .r
 ---
 
 ## Version history
+
+**v1.0.0** — First stable release. Real pause/resume for downloads (HTTP Range, with
+automatic fallback if a server doesn't support it), TorBox account/plan display, an
+aggregate speed + remaining-size readout, Retry All Failed, bulk Copy Download Links,
+keyboard shortcuts, and an optional "Run at Windows Startup" toggle. Built on top of the
+v0.7.5 security fix and bugfix sweep (archive path-traversal protection, multi-select
+with bulk actions, sortable columns, cancel-in-progress-download, duplicate-magnet
+warning, low-disk-space warning, faster concurrent polling).
 
 **v0.7.5** — Security fix (archive path-traversal/"Zip Slip" protection in auto-extract) and a
 bugfix + feature sweep: Clear All no longer corrupts history for in-flight downloads, poll

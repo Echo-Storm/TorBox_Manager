@@ -2,6 +2,50 @@
 
 ---
 
+## v1.0.0 — 2026-08-06
+
+First stable release. Built directly on top of v0.7.5's security fix and bugfix sweep,
+adding the feature set that makes this a complete desktop debrid client rather than a
+bare-bones queue viewer.
+
+### Features
+- **Real pause/resume for downloads** — pausing keeps the `.part` file instead of deleting
+  it; resuming sends an HTTP `Range` request and appends rather than restarting. If a
+  server/CDN ignores the Range request (no `206 Partial Content`), the download
+  transparently falls back to starting fresh instead of corrupting the file. Available from
+  the row's Download button (relabels to "Resume") and the right-click menu ("Pause
+  Download" / "Cancel Download" while active, "Resume Download" / "Discard Paused
+  Download" while paused).
+  **Known limitation**: pause state doesn't survive an app restart — see the README FAQ.
+- **TorBox account info** — plan and expiration shown in the left panel, so a lapsed
+  subscription doesn't silently break the queue. Fetched on startup and after Settings is
+  saved; every field is treated as optional since the exact API shape isn't verified
+  against every plan tier.
+- **Aggregate speed / remaining-size display** — the status bar shows combined download
+  speed and remaining bytes across all active downloads while any are running.
+- **Retry All Failed** — left-panel button re-attempts every row with a local download
+  error in one click.
+- **Bulk Copy Download Links** — multi-select context menu can resolve and copy every
+  selected Ready item's download link at once, one per line.
+- **Keyboard shortcuts** — `Delete` removes the current selection, `Ctrl+A` selects every
+  row, `F5` refreshes — all scoped to the Queue tab.
+- **Run at Windows Startup** — optional Settings toggle; off by default.
+- **Open Config Folder** — tray menu quick-access to `config.json` / history / log.
+
+### Fixes (found during this release's bug sweep)
+- A multi-file torrent pausing could briefly publish resume metadata for the wrong file
+  before all of its workers had actually paused.
+- Cancelling or discarding a paused download while TorBox now reports the item as errored
+  left the row showing a disabled "Download" instead of an enabled "Retry".
+
+### Documentation
+- README rewritten: frontloaded feature highlights, new SVG banner, no more references to
+  other debrid clients — this app now describes itself on its own terms.
+- Added `tbm/tests/` — a real, committed `unittest` suite (offscreen PyQt6, no live network
+  calls) replacing this project's previous session-only scratch verification scripts.
+
+---
+
 ## v0.7.5 — 2026-08-06
 
 ### Security

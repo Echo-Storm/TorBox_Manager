@@ -37,6 +37,7 @@ from constants import (
     ENDPOINT_DEL_TORRENT,
     ENDPOINT_DEL_WEBDL,
     ENDPOINT_DEL_USENET,
+    ENDPOINT_USER_ME,
 )
 
 # ---------------------------------------------------------------------------
@@ -361,6 +362,24 @@ def delete_usenet(api_key: str, usenet_id: int) -> dict:
         api_key,
         json={"usenet_id": usenet_id, "operation": "delete"},
     )
+
+# ---------------------------------------------------------------------------
+# Account info
+# ---------------------------------------------------------------------------
+
+def get_account_info(api_key: str) -> dict:
+    """
+    Fetch TorBox account/plan info from /user/me.
+
+    NOTE: the exact response shape has not been verified against a live
+    account of every plan tier — this is TorBox's documented/typical shape
+    (plan, premium_expires_at, total_downloaded, etc.). Callers must treat
+    every field in `data` as possibly absent and display a placeholder
+    rather than assume presence, same convention as the rest of api.py's
+    "verify against live responses" comments.
+    """
+    return _request("GET", ENDPOINT_USER_ME, api_key, params={"settings": "false"})
+
 
 # ---------------------------------------------------------------------------
 # Update check

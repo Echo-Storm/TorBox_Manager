@@ -41,6 +41,7 @@ DEFAULTS = {
     "watch_folder":             "",     # absolute path to the watch folder
     "watch_folder_delete":      True,   # delete the file from the watch folder after submitting
     "delete_from_torbox":       False,  # remove item from TorBox after local download completes
+    "run_at_startup":           False,  # launch automatically at Windows login (HKCU Run key)
 }
 
 # ---------------------------------------------------------------------------

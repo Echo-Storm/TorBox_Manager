@@ -584,6 +584,10 @@ class SettingsDialog(QDialog):
         self._tray_cb.setChecked(self._config.get("minimize_to_tray", True))
         layout.addWidget(self._tray_cb)
 
+        self._startup_cb = QCheckBox("Run at Windows startup")
+        self._startup_cb.setChecked(self._config.get("run_at_startup", False))
+        layout.addWidget(self._startup_cb)
+
         self._notify_cb = QCheckBox("Show tray notification when a download finishes")
         self._notify_cb.setChecked(self._config.get("tray_notifications", False))
         layout.addWidget(self._notify_cb)
@@ -732,6 +736,7 @@ class SettingsDialog(QDialog):
         updated["api_key"]            = self._key_input.text().strip()
         updated["download_dir"]       = self._dir_input.text().strip()
         updated["minimize_to_tray"]      = self._tray_cb.isChecked()
+        updated["run_at_startup"]        = self._startup_cb.isChecked()
         updated["tray_notifications"]    = self._notify_cb.isChecked()
         updated["create_subfolder"]      = self._subfolder_cb.isChecked()
         updated["auto_extract"]          = self._extract_cb.isChecked()

@@ -9,7 +9,7 @@
 
 APP_NAME        = "TorBox Manager"
 APP_SUBTITLE    = "EchoStorm Edition"
-APP_VERSION     = "0.7.5"
+APP_VERSION     = "1.0.0"
 LOG_FILENAME    = "TorBox_Manager_Log.txt"
 CONFIG_FILENAME = "config.json"
 
@@ -35,6 +35,18 @@ ENDPOINT_DL_USENET      = "/usenet/requestdl"
 ENDPOINT_DEL_TORRENT    = "/torrents/controltorrent"
 ENDPOINT_DEL_WEBDL      = "/webdl/controlwebdownload"
 ENDPOINT_DEL_USENET     = "/usenet/controlusenetdownload"
+
+ENDPOINT_USER_ME        = "/user/me"
+
+# TorBox plan enum -> label. Best-effort mapping (not verified against a live
+# account of every tier) — an unrecognized value falls back to "Plan {n}"
+# rather than guessing, see api.get_account_info().
+PLAN_LABELS = {
+    0: "Free",
+    1: "Essential",
+    2: "Pro",
+    3: "Standard",
+}
 
 # ---------------------------------------------------------------------------
 # Queue item types

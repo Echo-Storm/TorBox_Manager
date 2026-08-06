@@ -1,5 +1,5 @@
 # TorBox Manager — EchoStorm Edition
-# Project Specification v0.7.5
+# Project Specification v1.0.0
 
 ---
 
@@ -64,10 +64,13 @@ TorBox_Manager/
 ├── .github/
 │   └── workflows/
 │       └── build.yml          ← GitHub Actions: builds exe, uploads to release
+├── assets/
+│   └── banner.svg              ← README banner (repo-doc asset, not bundled into the exe)
 ├── tbm/                       ← all source
 │   ├── assets/
 │   │   ├── TorBox_Manager.ico ← 7-size ICO (16–256px) — exe + taskbar icon
 │   │   └── tray_icon.png      ← 64×64 PNG — system tray icon
+│   ├── tests/                 ← stdlib unittest suite, offscreen PyQt6 — see tests/README.md
 │   ├── main.py                ← bootstrap, logging, sys.excepthook
 │   ├── ui.py                  ← MainWindow, all widget layout and slots
 │   ├── dialogs.py             ← all modal dialogs
@@ -113,7 +116,7 @@ calls from a background thread.
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────┐
-│  v0.7.1  ────────── | TORBOX MANAGER | ────────── ECHOSTORM EDITION       │
+│  v1.0.0  ────────── | TORBOX MANAGER | ────────── ECHOSTORM EDITION       │
 ├──────────────────┬───────────────────────────────────────────────────────┤
 │  LEFT PANEL      │  [Queue] [History]          ← tab bar                 │
 │  (fixed 220px)   ├───────────────────────────────────────────────────────┤
@@ -128,12 +131,14 @@ calls from a background thread.
 │  [Refresh Now]   │  [n downloads]  [Clear History]  ← header             │
 │  [Clear Done]    │  Time|Name|File|Type|Size                             │
 │  [Clear All]     │                                                       │
+│  [Retry Failed]  │                                                       │
 │                  ├───────────────────────────────────────────────────────┤
-│                  │  LOG  [errors only]                                   │
-│  ⚙ Settings      │  HH:MM:SS [INFO] ...                                  │
-│                  │  HH:MM:SS [ERROR] ...                                 │
-│                  ├───────────────────────────────────────────────────────┤
-│                  │  ● status   [⬆ update]  [⬇ Download All] | ♥ donate  │
+│  ACCOUNT         │  LOG  [errors only]                                   │
+│  Plan: Pro       │  HH:MM:SS [INFO] ...                                  │
+│  Expires: ...    │  HH:MM:SS [ERROR] ...                                 │
+│  ⚙ Settings      ├───────────────────────────────────────────────────────┤
+│                  │  ● status  [⇊ N downloading·speed·left]  [⬆ update]  │
+│                  │  [⬇ Download All] | ♥ donate                          │
 └──────────────────┴───────────────────────────────────────────────────────┘
 ```
 
@@ -156,13 +161,23 @@ layout, not `QMainWindow.setStatusBar()`, so the border runs through it uninterr
 | Ratio | Optional | Right-click header to toggle |
 | ETA | Optional | Right-click header to toggle |
 | Added | Optional | Right-click header to toggle |
-| Progress | Yes | QProgressBar; indeterminate at 0%, solid green when Ready |
-| Download | Yes | Enabled when status=Ready; becomes "Open" after local download; "Retry" on error |
+| Progress | Yes | QProgressBar; indeterminate at 0%, solid green when Ready, amber "Paused" while locally paused |
+| Download | Yes | Enabled when status=Ready; becomes "Open" after local download, "Retry" on error, "Resume" while locally paused |
 | Delete | Yes | Confirms then calls TorBox delete API; row removed optimistically |
 
 Selection mode is `ExtendedSelection` (Ctrl/Shift-click for multiple rows). Right-clicking
-inside a multi-row selection shows a bulk menu ("Download Selected (N)", "Delete Selected (N)")
-instead of the single-item menu; right-clicking outside the selection acts on just that row.
+inside a multi-row selection shows a bulk menu — "Download Selected (N)", "Copy Download
+Links (N)" (Ready rows only), "Delete Selected (N)" — instead of the single-item menu;
+right-clicking outside the selection acts on just that row. The single-row menu additionally
+shows "Pause Download" / "Cancel Download" while a row is actively downloading, or "Resume
+Download" / "Discard Paused Download" while it's locally paused.
+
+Keyboard shortcuts (window-scoped, active only while the Queue tab is showing): `Delete`
+removes the current selection (single delete or bulk delete), `Ctrl+A` selects every row,
+`F5` refreshes. The queue table itself has `setFocusPolicy(NoFocus)` (no focus rectangle,
+by design), so these are wired to the main window rather than the table; Qt's standard
+`ShortcutOverride` protocol means a focused `QLineEdit` (e.g. the filter box) still gets its
+own native Ctrl+A/Delete handling first.
 
 Column headers are sortable (click to sort). Row lookups used by live actions (download
 dispatch, progress/finished/error/cancelled handlers, delete, clear) go through
@@ -198,6 +213,7 @@ Right-click → Copy Path or Open in Explorer.
 | `LinkRequestWorker` | Right-click Copy Link / Open in Browser | Fetches time-limited URL without streaming |
 | `UpdateCheckWorker` | 3 s after startup | Checks GitHub Releases API for newer version; silent on error |
 | `ExtractWorker` | After DownloadWorker.finished (if auto_extract=True) | Extracts archive on background thread; optional delete-after |
+| `UserInfoWorker` | 1.5 s after startup / after Settings save | One-shot fetch of TorBox account/plan info for the left-panel Account section |
 
 All workers communicate back to the main thread via Qt signals only.
 
@@ -213,6 +229,21 @@ All workers communicate back to the main thread via Qt signals only.
   cancelled download cleans up its `.part` file and emits `signals.cancelled` instead of
   `signals.finished`/`signals.error`. `ui.py` tracks live workers per row key in
   `_active_downloads` so a right-click "Cancel Download" can reach them.
+- Pausable/resumable: `pause()` is the same flag-checked-between-chunks mechanism as
+  `cancel()`, except the `.part` file is kept and `signals.paused(bytes_done, part_path)`
+  is emitted instead. `ui.py` stashes `{part_path, bytes_done, download_dir, file_id,
+  file_name}` per row key in `_paused_downloads`. Resuming constructs a fresh
+  `DownloadWorker` with `resume_from`/`resume_part_path` set, which sends
+  `Range: bytes={resume_from}-` and appends (`"ab"`) instead of overwriting. If the
+  response isn't `206 Partial Content` (server/CDN ignored the Range request), the worker
+  transparently falls back to a full fresh download rather than corrupting the file by
+  appending server-sent bytes-from-zero. An `OSError`/`RequestException` mid-resume keeps
+  the partial `.part` file (worth another resume attempt); the same failure on a fresh,
+  non-resumed attempt still discards it, since there's nothing worth keeping.
+  **Known limitation**: pause state is in-memory only (`_paused_downloads` isn't persisted
+  to `config.json`). Closing the app loses the ability to resume through the UI — the
+  `.part` file remains on disk, but a fresh Download click on that item overwrites it from
+  scratch. Persisting pause state across restarts is a candidate for a future release.
 
 ### Multi-file torrent flow
 1. User clicks Download on a torrent row
@@ -231,6 +262,11 @@ All workers communicate back to the main thread via Qt signals only.
 - "Download All" and the multi-select "Download Selected" bulk action both estimate total
   size against `shutil.disk_usage(download_dir).free` first and confirm with the user before
   proceeding if there isn't enough room (best-effort — skipped if the download dir isn't set)
+- `_download_errors: set[str]` — row keys with a local download error (Retry showing),
+  tracked explicitly rather than sniffed from button text. "Retry All Failed" (left panel)
+  re-attempts every tracked key not currently downloading or paused; the set is cleared for
+  a key whenever a fresh attempt (including a resume) is dispatched for it, or its row is
+  removed.
 
 ---
 
@@ -294,6 +330,52 @@ defaults on and archive contents are untrusted (arbitrary torrents/hosters).
 
 ---
 
+## Account Info
+
+- Left panel, above the Settings button: two labels showing TorBox plan and expiration
+- Fetched via `UserInfoWorker` hitting `/user/me` — 1.5 s after startup, and again after
+  Settings is saved (in case the API key changed)
+- `_account_fetch_in_flight` guard prevents two overlapping fetches from returning out of
+  order and leaving the panel showing the stale one
+- **Every field is treated as optional.** The exact `/user/me` response shape is TorBox's
+  documented/typical fields (`plan`, `premium_expires_at`) but has not been verified
+  against a live account of every plan tier — an unrecognized `plan` value falls back to
+  `"Plan {n}"` rather than guessing, and a missing expiration just leaves that line blank.
+  Failure is silent (logged only) — the panel just keeps showing its placeholder.
+
+---
+
+## Status Bar — Aggregate Speed Display
+
+- `_speed_timer` (`QTimer`, 1 s interval) computes combined download speed and remaining
+  bytes across every active download and shows it in the status bar, e.g.
+  `⇊ 3 downloading · 4.2 MB/s · 1.1 GB left`
+- Hidden entirely when nothing is downloading
+- `_progress_bytes` / `_progress_totals: dict[str, int]` hold the latest
+  (bytes_received, total_bytes) per actively-downloading row key from the last progress
+  signal — same "last worker wins" simplification the per-row progress bar already uses
+  for multi-file torrents
+- Cleared per-key whenever that key leaves `_downloading` (finished/error/cancelled/paused)
+
+---
+
+## Run at Windows Startup
+
+- Settings toggle; off by default (opt-in, so upgrading users are never silently enrolled)
+- Implemented via `winreg` — writes/removes a value named `TorBoxManagerEchoStorm` under
+  `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`
+- Command written: `"<exe path>"` when frozen; `"<pythonw.exe>" "<main.py path>"` in source
+  mode (falls back to `sys.executable` if `pythonw.exe` isn't found next to it, to avoid a
+  console window)
+- Applied on every launch (self-healing — keeps the registered path current if the exe was
+  moved) and again immediately after Settings is saved
+- Best-effort: a registry write failure is logged, never raised to the user
+- Not cleaned up automatically if the app is deleted without first unchecking the box
+  (there's no uninstaller — it's a portable exe); Windows will just silently fail to launch
+  the missing path at next login
+
+---
+
 ## Polling
 
 - `QTimer` drives `PollWorker` at the configured interval (default 30 s, range 10–300 s)
@@ -335,6 +417,21 @@ defaults on and archive contents are untrusted (arbitrary torrents/hosters).
 | `watch_folder` | str | `""` | Absolute path to watch |
 | `watch_folder_delete` | bool | `true` | Delete file from watch folder on success |
 | `delete_from_torbox` | bool | `false` | Delete TorBox entry after local download |
+| `run_at_startup` | bool | `false` | Launch automatically at Windows login (HKCU Run key) |
 
 `config.py` deep-merges saved values over `DEFAULTS` on load so new keys added in later
 versions are never silently missing for users upgrading from an older config file.
+
+---
+
+## Testing
+
+`tbm/tests/` — stdlib `unittest`, no extra dependency. Builds a real `MainWindow` against
+fake queue data with `QT_QPA_PLATFORM=offscreen`, so the suite runs headless with no visible
+window and no real network calls (workers like `DeleteWorker`/`DownloadWorker` are replaced
+with small fakes). See `tests/README.md` for the full breakdown and how to run it —
+short version: `venv\Scripts\python -m unittest discover -s tests -v` from `tbm/`.
+
+Registry-touching code (`_apply_startup_setting`) is exercised for real only on the
+safe, idempotent "disabled" path; the "enabled" path is verified against a mocked `winreg`
+so the suite never leaves a startup entry behind on the machine that runs it.
