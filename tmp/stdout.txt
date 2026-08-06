@@ -1,0 +1,8 @@
+ Volume in drive D is Project
+ Volume Serial Number is ECC2-D037
+
+ Directory of D:\Applications\ReForge\venv\Scripts
+
+07/01/2026  07:50 PM           274,712 python.exe
+               1 File(s)        274,712 bytes
+               0 Dir(s)  1,333,924,868,096 bytes free
