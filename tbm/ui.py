@@ -23,6 +23,7 @@
 #
 import os
 import re
+import shutil
 import sys
 from urllib.parse import unquote
 import webbrowser
@@ -288,6 +289,18 @@ _PROGRESS_BAR_DONE_STYLE = f"""
     }}
 """
 
+_MENU_STYLE = f"""
+    QMenu {{
+        background-color: {COLOR_PANEL};
+        color: {COLOR_TEXT};
+        border: 1px solid {COLOR_BORDER};
+    }}
+    QMenu::item:selected {{
+        background-color: {COLOR_ACCENT};
+        color: #000000;
+    }}
+"""
+
 _PROGRESS_BAR_ACTIVE_STYLE = f"""
     QProgressBar {{
         background-color: {COLOR_PANEL};
@@ -357,6 +370,20 @@ def _parse_progress(item: dict) -> int:
         return 0
 
 
+def _classify_download_state(download_state: str) -> str:
+    """
+    Bucket a raw TorBox download_state string into "error" / "downloading" /
+    "queued". Shared by _torbox_state_to_status() and _torbox_display_status()
+    so the keyword lists only live in one place.
+    """
+    s = download_state.lower()
+    if any(k in s for k in ("error", "missing", "failed")):
+        return "error"
+    if any(k in s for k in ("downloading", "checking", "moving", "fetching", "metadl")):
+        return "downloading"
+    return "queued"
+
+
 def _torbox_state_to_status(item: dict) -> str:
     """
     Return the internal STATUS_* constant for an item.
@@ -366,16 +393,12 @@ def _torbox_state_to_status(item: dict) -> str:
     if item.get("cached") is True:
         return STATUS_READY
 
-    download_state = str(item.get("download_state", "")).lower()
-
-    if any(s in download_state for s in ("error", "missing", "failed")):
-        return STATUS_ERROR
-
-    if any(s in download_state for s in ("downloading", "checking",
-                                          "moving", "fetching", "metadl")):
-        return STATUS_DOWNLOADING
-
-    return STATUS_QUEUED
+    bucket = _classify_download_state(str(item.get("download_state", "")))
+    return {
+        "error":       STATUS_ERROR,
+        "downloading": STATUS_DOWNLOADING,
+        "queued":      STATUS_QUEUED,
+    }[bucket]
 
 
 def _torbox_display_status(item: dict) -> str:
@@ -390,16 +413,12 @@ def _torbox_display_status(item: dict) -> str:
             return STATUS_DISPLAY["cached_seeding"]
         return STATUS_DISPLAY["cached_idle"]
 
-    download_state = str(item.get("download_state", "")).lower()
-
-    if any(s in download_state for s in ("error", "missing", "failed")):
-        return STATUS_DISPLAY["error"]
-
-    if any(s in download_state for s in ("downloading", "checking",
-                                          "moving", "fetching", "metadl")):
-        return STATUS_DISPLAY["downloading"]
-
-    return STATUS_DISPLAY["queued"]
+    bucket = _classify_download_state(str(item.get("download_state", "")))
+    return {
+        "error":       STATUS_DISPLAY["error"],
+        "downloading": STATUS_DISPLAY["downloading"],
+        "queued":      STATUS_DISPLAY["queued"],
+    }[bucket]
 
 
 def _row_key(item: dict) -> str:
@@ -504,11 +523,23 @@ class MainWindow(QMainWindow):
         self._row_items: dict[str, dict] = {}
         # Tracks which row_keys currently have a DownloadWorker running
         self._downloading: dict[str, int] = {}  # key -> number of active download workers
+        # Tracks the live DownloadWorker instances per row_key so an
+        # in-progress download can be cancelled from the UI.
+        self._active_downloads: dict[str, list] = {}
         # Pending downloads waiting for a concurrency slot (FIFO)
         self._download_queue: list[tuple[str, dict]] = []
         # Keys deleted by the user — suppressed for 2 poll cycles so they
         # don't reappear before TorBox finishes processing the delete.
         self._deleted_keys: set[str] = set()
+        # True while a PollWorker is in flight — prevents a new poll from being
+        # submitted before the previous one returns, which could otherwise let
+        # a stale response overwrite fresher table state if TorBox is slow.
+        self._poll_in_flight = False
+        # Counts consecutive polls where a previously-seen item was missing
+        # from the fresh list (removed elsewhere — TorBox web UI, expiry).
+        # Row is dropped after a few consecutive misses rather than lingering
+        # forever or being dropped on a single transient blip.
+        self._missing_polls: dict[str, int] = {}
         # All log lines stored as (level, formatted_string) for filter re-render
         self._log_lines: list[tuple[str, str]] = []
         # Watch folder state
@@ -1047,17 +1078,7 @@ class MainWindow(QMainWindow):
         path = file_item.data(Qt.ItemDataRole.UserRole)
 
         menu = QMenu(self)
-        menu.setStyleSheet(f"""
-            QMenu {{
-                background-color: {COLOR_PANEL};
-                color: {COLOR_TEXT};
-                border: 1px solid {COLOR_BORDER};
-            }}
-            QMenu::item:selected {{
-                background-color: {COLOR_ACCENT};
-                color: #000000;
-            }}
-        """)
+        menu.setStyleSheet(_MENU_STYLE)
         copy_action = menu.addAction("Copy Path")
         open_action = menu.addAction("Open in Explorer")
 
@@ -1076,13 +1097,27 @@ class MainWindow(QMainWindow):
         self._table.setColumnCount(COL_COUNT)
         self._table.setHorizontalHeaderLabels(COL_HEADERS)
         self._table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
-        self._table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
+        self._table.setSelectionMode(QTableWidget.SelectionMode.ExtendedSelection)
         self._table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self._table.setAlternatingRowColors(True)
         self._table.setShowGrid(True)
         self._table.verticalHeader().setVisible(False)
         self._table.horizontalHeader().setStretchLastSection(False)
         self._table.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        # Sorting is toggled off during _update_queue_table's bulk row
+        # add/update pass (dynamic sort-on-data-change would otherwise move
+        # rows out from under _row_index mid-update) and re-enabled + the
+        # index rebuilt afterward. See _rebuild_row_index().
+        self._table.setSortingEnabled(True)
+        # A user clicking a header to sort reorders rows immediately — not
+        # just at the next poll's _update_queue_table pass — which would
+        # otherwise leave _row_index pointing at stale physical row positions
+        # until the next poll. _find_row() below is the actual fix (it
+        # verifies/self-heals on every lookup); this signal just proactively
+        # refreshes the whole index right away so it doesn't drift at all.
+        self._table.horizontalHeader().sortIndicatorChanged.connect(
+            lambda *args: QTimer.singleShot(0, self._rebuild_row_index)
+        )
 
         hdr = self._table.horizontalHeader()
         hdr.setSectionResizeMode(COL_NAME,     QHeaderView.ResizeMode.Stretch)
@@ -1201,6 +1236,14 @@ class MainWindow(QMainWindow):
         row = self._table.rowAt(pos.y())
         if row < 0:
             return
+
+        # Multiple rows selected and the click landed inside that selection —
+        # show the bulk actions menu instead of the single-item one.
+        selected_rows = sorted({idx.row() for idx in self._table.selectionModel().selectedRows()})
+        if len(selected_rows) > 1 and row in selected_rows:
+            self._show_bulk_context_menu(pos, selected_rows)
+            return
+
         name_cell = self._table.item(row, COL_NAME)
         if not name_cell:
             return
@@ -1214,17 +1257,7 @@ class MainWindow(QMainWindow):
         status      = _torbox_state_to_status(item)
 
         menu = QMenu(self)
-        menu.setStyleSheet(f"""
-            QMenu {{
-                background-color: {COLOR_PANEL};
-                color: {COLOR_TEXT};
-                border: 1px solid {COLOR_BORDER};
-            }}
-            QMenu::item:selected {{
-                background-color: {COLOR_ACCENT};
-                color: #000000;
-            }}
-        """)
+        menu.setStyleSheet(_MENU_STYLE)
 
         copy_name_action = QAction("Copy Name", self)
         copy_name_action.triggered.connect(
@@ -1246,7 +1279,69 @@ class MainWindow(QMainWindow):
                 )
                 menu.addAction(open_action)
 
+        if key in self._downloading:
+            cancel_action = QAction("Cancel Download", self)
+            cancel_action.triggered.connect(lambda: self._cancel_download(key))
+            menu.addAction(cancel_action)
+
         menu.exec(self._table.viewport().mapToGlobal(pos))
+
+    def _show_bulk_context_menu(self, pos, rows: list):
+        """Right-click menu shown when more than one queue row is selected."""
+        keys = []
+        for r in rows:
+            name_cell = self._table.item(r, COL_NAME)
+            if name_cell:
+                k = name_cell.data(Qt.ItemDataRole.UserRole)
+                if k:
+                    keys.append(k)
+        if not keys:
+            return
+
+        menu = QMenu(self)
+        menu.setStyleSheet(_MENU_STYLE)
+
+        download_action = QAction(f"Download Selected ({len(keys)})", self)
+        download_action.triggered.connect(lambda: self._bulk_download(keys))
+        menu.addAction(download_action)
+
+        delete_action = QAction(f"Delete Selected ({len(keys)})", self)
+        delete_action.triggered.connect(lambda: self._bulk_delete(keys))
+        menu.addAction(delete_action)
+
+        menu.exec(self._table.viewport().mapToGlobal(pos))
+
+    def _bulk_download(self, keys: list):
+        """Start a download for every selected row that's Ready and idle."""
+        candidates = [
+            (key, self._row_items[key]) for key in keys
+            if key in self._row_items and key not in self._downloading
+            and _torbox_state_to_status(self._row_items[key]) == STATUS_READY
+        ]
+        if not candidates:
+            self._log("Bulk download: no eligible (Ready, idle) items in selection.", "INFO")
+            return
+        if not self._confirm_disk_space(candidates):
+            return
+        for key, item in candidates:
+            self._start_download(key, item)
+        self._log(f"Bulk download: started {len(candidates)} of {len(keys)} selected item(s).")
+
+    def _bulk_delete(self, keys: list):
+        """Confirm once, then remove every selected row from TorBox."""
+        targets = [(k, self._row_items[k]) for k in keys if k in self._row_items]
+        if not targets:
+            return
+        reply = QMessageBox.question(
+            self,
+            "Delete Selected",
+            f"Remove {len(targets)} item(s) from TorBox?\n\nThis cannot be undone.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        for key, item in targets:
+            self._delete_item(key, item)
 
     def _request_link(self, item: dict, action: str):
         """Dispatch a LinkRequestWorker; on success copy URL or open in browser."""
@@ -1523,17 +1618,7 @@ class MainWindow(QMainWindow):
         self._tray.setToolTip(f"{APP_NAME} {APP_SUBTITLE}")
 
         menu = QMenu()
-        menu.setStyleSheet(f"""
-            QMenu {{
-                background-color: {COLOR_PANEL};
-                color: {COLOR_TEXT};
-                border: 1px solid {COLOR_BORDER};
-            }}
-            QMenu::item:selected {{
-                background-color: {COLOR_ACCENT};
-                color: #000000;
-            }}
-        """)
+        menu.setStyleSheet(_MENU_STYLE)
 
         open_action    = QAction("Open",    self)
         about_action   = QAction("About",   self)
@@ -1574,10 +1659,30 @@ class MainWindow(QMainWindow):
     def _on_add_magnet(self):
         dlg = AddMagnetDialog(self)
         if dlg.exec():
-            link    = dlg.magnet_link()
+            link = dlg.magnet_link()
+            if self._is_duplicate_magnet(link):
+                reply = QMessageBox.question(
+                    self,
+                    "Possible Duplicate",
+                    "This magnet link already appears to be in your queue.\n\n"
+                    "Add it anyway?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                )
+                if reply != QMessageBox.StandardButton.Yes:
+                    return
             api_key = self.config.get("api_key", "")
             self._log(f"Adding magnet: {link[:60]}{'...' if len(link) > 60 else ''}")
             self._submit_add(lambda: api.add_magnet(api_key, link), "magnet")
+
+    def _is_duplicate_magnet(self, link: str) -> bool:
+        """
+        True if an item already in the queue was added from this exact magnet
+        link. TorBox echoes the original magnet URI back on the "magnet" field
+        for magnet-added items (see api.list_all) — that's the only add type
+        with a reliable field to compare against, so hoster links aren't
+        checked here.
+        """
+        return any(item.get("magnet") == link for item in self._row_items.values())
 
     def _on_add_torrent(self):
         path, _ = QFileDialog.getOpenFileName(
@@ -1651,24 +1756,51 @@ class MainWindow(QMainWindow):
         self._log(f"Cleared {len(keys_to_remove)} completed row(s) from display.")
 
     def _on_clear_all(self):
-        """Remove all rows from the local display (does not delete from TorBox)."""
-        count = self._table.rowCount()
-        self._table.setRowCount(0)
-        self._row_index.clear()
-        self._row_items.clear()
-        self._download_queue.clear()
-        self._log(f"Cleared all {count} row(s) from display.")
+        """
+        Remove all rows from the local display (does not delete from TorBox).
+
+        Rows with an active local download are preserved — clearing them would
+        orphan the running DownloadWorker's item lookup (_row_items), which
+        previously caused the completed download to be recorded in history
+        with a blank name.
+        """
+        if self._table.rowCount() == 0:
+            return
+        reply = QMessageBox.question(
+            self,
+            "Clear All",
+            "Clear all items from the queue display?\n\n"
+            "This only affects the local view — items are not removed from "
+            "TorBox. Downloads currently in progress are left alone.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        keys_to_remove = [k for k in list(self._row_items) if k not in self._downloading]
+        for key in keys_to_remove:
+            self._remove_row(key)
+        self._download_queue = [(k, i) for k, i in self._download_queue if k in self._downloading]
+        self._log(f"Cleared {len(keys_to_remove)} row(s) from display.")
 
     def _on_download_all(self):
         """Queue every Ready row for download, respecting the concurrency limit."""
-        max_dl = self.config.get("max_concurrent_downloads", DEFAULT_MAX_CONCURRENT_DL)
         queued_keys = {k for k, _ in self._download_queue}
+        candidates = [
+            (key, item) for key, item in self._row_items.items()
+            if _torbox_state_to_status(item) == STATUS_READY
+            and key not in self._downloading and key not in queued_keys
+        ]
+        if not candidates:
+            self._log("No ready items to download.", "INFO")
+            return
+
+        if not self._confirm_disk_space(candidates):
+            return
+
+        max_dl = self.config.get("max_concurrent_downloads", DEFAULT_MAX_CONCURRENT_DL)
         started = queued = 0
-        for key, item in self._row_items.items():
-            if _torbox_state_to_status(item) != STATUS_READY:
-                continue
-            if key in self._downloading or key in queued_keys:
-                continue
+        for key, item in candidates:
             active = sum(self._downloading.values())
             if active < max_dl:
                 self._start_download(key, item)
@@ -1676,15 +1808,42 @@ class MainWindow(QMainWindow):
             else:
                 self._download_queue.append((key, item))
                 queued += 1
-        if started or queued:
-            parts = []
-            if started:
-                parts.append(f"started {started}")
-            if queued:
-                parts.append(f"queued {queued}")
-            self._log(f"Download All: {', '.join(parts)}.")
-        else:
-            self._log("No ready items to download.", "INFO")
+        parts = []
+        if started:
+            parts.append(f"started {started}")
+        if queued:
+            parts.append(f"queued {queued}")
+        self._log(f"Download All: {', '.join(parts)}.")
+
+    def _confirm_disk_space(self, candidates: list) -> bool:
+        """
+        Best-effort free-space check before a batch download.
+
+        Returns False only if the user was warned and chose not to continue.
+        Skips silently (returns True) if the download dir isn't set/valid yet
+        or disk_usage() fails — those are handled per-file at download time.
+        """
+        download_dir = self.config.get("download_dir", "").strip()
+        if not download_dir or not os.path.isdir(download_dir):
+            return True
+        try:
+            free_bytes = shutil.disk_usage(download_dir).free
+        except OSError:
+            return True
+
+        total_needed = sum(item.get("size", 0) or 0 for _, item in candidates)
+        if total_needed <= free_bytes:
+            return True
+
+        reply = QMessageBox.question(
+            self,
+            "Low Disk Space",
+            f"Download All needs about {_fmt_size(total_needed)}, but only "
+            f"{_fmt_size(free_bytes)} is free in the download directory.\n\n"
+            "Continue anyway?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        return reply == QMessageBox.StandardButton.Yes
 
     # -----------------------------------------------------------------------
     # Settings / About
@@ -1738,6 +1897,12 @@ class MainWindow(QMainWindow):
         api_key = self.config.get("api_key", "")
         if not api_key:
             return
+        if self._poll_in_flight:
+            # A previous poll hasn't returned yet — skip this tick rather than
+            # letting two in-flight PollWorkers race and possibly have the
+            # slower one overwrite the table with stale data.
+            return
+        self._poll_in_flight = True
 
         worker = PollWorker(api_key)
         worker.signals.finished.connect(self._on_poll_finished)
@@ -1764,6 +1929,7 @@ class MainWindow(QMainWindow):
 
     def _on_poll_finished(self, items: list):
         """Slot — runs on main thread — update the queue table from fresh data."""
+        self._poll_in_flight = False
         self._update_queue_table(items)
         # Build a breakdown: total + counts by internal status
         ready      = sum(1 for i in items if _torbox_state_to_status(i) == STATUS_READY)
@@ -1777,6 +1943,7 @@ class MainWindow(QMainWindow):
         self._set_status("  ·  ".join(parts))
 
     def _on_poll_error(self, msg: str):
+        self._poll_in_flight = False
         self._log(f"Poll error: {msg}", "ERROR")
         self._set_status(f"Poll failed: {msg}")
 
@@ -1789,14 +1956,22 @@ class MainWindow(QMainWindow):
         Diff incoming item list against existing rows.
         - Update rows that already exist (same row_key).
         - Add new rows for items not yet in the table.
-        - Rows for items no longer in the list are left alone
-          (they may be mid-download; a Clear Done or Clear All will remove them).
+        - Rows for items missing from several consecutive polls (removed on
+          TorBox's side — web UI, expiry, etc.) are dropped; a single miss is
+          treated as a transient blip and left alone. Rows with an active
+          local download are never auto-dropped.
+
+        Sorting is disabled for the duration of this pass: QTableWidget's
+        dynamic sort-on-data-change would otherwise reorder rows out from
+        under _row_index while cells are being updated in place.
         """
+        self._table.setSortingEnabled(False)
         seen_keys = set()
 
         for item in items:
             key = _row_key(item)
             seen_keys.add(key)
+            self._missing_polls.pop(key, None)
 
             # Skip items the user just deleted — give TorBox time to process.
             # Keys are removed from this set after one poll cycle (below).
@@ -1810,9 +1985,28 @@ class MainWindow(QMainWindow):
             else:
                 self._add_queue_row(key, item)
 
+        # Items that were in the table before but didn't come back this poll.
+        # Give it a few consecutive misses before treating it as really gone,
+        # so one slow/partial API response doesn't drop a valid row.
+        stale_keys = set(self._row_items) - seen_keys - self._deleted_keys
+        for key in stale_keys:
+            if key in self._downloading:
+                self._missing_polls.pop(key, None)
+                continue
+            misses = self._missing_polls.get(key, 0) + 1
+            self._missing_polls[key] = misses
+            if misses >= 3:
+                name = self._row_items.get(key, {}).get("name", key)
+                self._log(f"Removed from queue (no longer on TorBox): {name}")
+                self._remove_row(key)
+                self._missing_polls.pop(key, None)
+
         # Clear the deleted-keys suppression set after each poll cycle.
         # By the next poll TorBox will have finished processing the deletes.
         self._deleted_keys.clear()
+
+        self._table.setSortingEnabled(True)
+        self._rebuild_row_index()
 
         # Re-apply any active filter so rows added/updated this poll respect it.
         if hasattr(self, "_filter_input"):
@@ -2008,27 +2202,40 @@ class MainWindow(QMainWindow):
         self._set_optional_cells(row, item)
 
     def _set_optional_cells(self, row: int, item: dict):
-        """Populate Seeds, Peers, Ratio, ETA, Added cells for a given row."""
-        def _cell(text: str) -> QTableWidgetItem:
-            c = QTableWidgetItem(str(text))
+        """
+        Populate Seeds, Peers, Ratio, ETA, Added cells for a given row.
+
+        Reuses the existing QTableWidgetItem and only touches setText() when
+        the value actually changed, instead of allocating a fresh item on
+        every poll regardless — cheap items, but this runs for every visible
+        row on every poll cycle.
+        """
+        def _set_cell(col: int, text: str):
+            existing = self._table.item(row, col)
+            if existing is not None:
+                if existing.text() != text:
+                    existing.setText(text)
+                return
+            c = QTableWidgetItem(text)
             c.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             c.setForeground(QColor(COLOR_TEXT_MUTED))
-            return c
+            self._table.setItem(row, col, c)
 
         seeds = item.get("seeds", 0) or 0
         peers = item.get("peers", 0) or 0
         ratio = item.get("ratio", 0) or 0
         eta   = item.get("eta", 0)   or 0
 
-        self._table.setItem(row, COL_SEEDS, _cell(seeds))
-        self._table.setItem(row, COL_PEERS, _cell(peers))
-        self._table.setItem(row, COL_RATIO, _cell(f"{float(ratio):.2f}"))
-        self._table.setItem(row, COL_ETA,   _cell(_fmt_eta(eta)))
-        self._table.setItem(row, COL_ADDED, _cell(_fmt_added(item.get("created_at", ""))))
+        _set_cell(COL_SEEDS, str(seeds))
+        _set_cell(COL_PEERS, str(peers))
+        _set_cell(COL_RATIO, f"{float(ratio):.2f}")
+        _set_cell(COL_ETA,   _fmt_eta(eta))
+        _set_cell(COL_ADDED, _fmt_added(item.get("created_at", "")))
 
     def _remove_row(self, key: str):
         """Remove a row from the table and rebuild the row index."""
-        row = self._row_index.pop(key, None)
+        row = self._find_row(key)
+        self._row_index.pop(key, None)
         if row is None:
             return
         self._table.removeRow(row)
@@ -2038,6 +2245,51 @@ class MainWindow(QMainWindow):
             k: (r - 1 if r > row else r)
             for k, r in self._row_index.items()
         }
+
+    def _rebuild_row_index(self):
+        """
+        Recompute _row_index from scratch by scanning the table's Name column
+        for the row_key stored in each cell's UserRole.
+
+        Needed after re-enabling sorting: QTableWidget's dynamic sort can
+        reorder rows to positions that no longer match the index built during
+        row insertion/update.
+        """
+        self._row_index = {}
+        for row in range(self._table.rowCount()):
+            name_cell = self._table.item(row, COL_NAME)
+            if name_cell:
+                key = name_cell.data(Qt.ItemDataRole.UserRole)
+                if key:
+                    self._row_index[key] = row
+
+    def _find_row(self, key: str):
+        """
+        Resolve the current physical row for a row_key, self-healing if the
+        cached _row_index entry is stale.
+
+        This matters beyond the sort-click case: download progress/finished/
+        error/cancelled signals can land at any time, including in the
+        window between a user re-sorting the table and the deferred index
+        rebuild running. Verifying (and repairing) on every lookup makes
+        those call sites correct regardless of *why* the cache went stale,
+        rather than depending on rebuild timing. Falls back to an O(n) scan
+        only on a cache miss — the common case stays O(1).
+        """
+        row = self._row_index.get(key)
+        if row is not None and 0 <= row < self._table.rowCount():
+            cell = self._table.item(row, COL_NAME)
+            if cell is not None and cell.data(Qt.ItemDataRole.UserRole) == key:
+                return row
+
+        for row in range(self._table.rowCount()):
+            cell = self._table.item(row, COL_NAME)
+            if cell is not None and cell.data(Qt.ItemDataRole.UserRole) == key:
+                self._row_index[key] = row
+                return row
+
+        self._row_index.pop(key, None)
+        return None
 
     @staticmethod
     def _apply_status_color(cell, status: str):
@@ -2182,7 +2434,7 @@ class MainWindow(QMainWindow):
             except OSError as exc:
                 self._log(f"Could not create subfolder '{folder_name}': {exc}", "WARN")
 
-        row = self._row_index.get(key)
+        row = self._find_row(key)
         if row is not None:
             pbar = self._table.cellWidget(row, COL_PROGRESS)
             if isinstance(pbar, QProgressBar):
@@ -2201,20 +2453,42 @@ class MainWindow(QMainWindow):
             file_id      = file_id,
             file_name    = file_name,
         )
+        self._active_downloads.setdefault(key, []).append(worker)
         worker.signals.progress.connect(
             lambda recv, total, k=key: self._on_download_progress(k, recv, total)
         )
         worker.signals.finished.connect(
-            lambda fpath, k=key: self._on_download_finished(k, fpath)
+            lambda fpath, k=key, w=worker: (self._untrack_worker(k, w), self._on_download_finished(k, fpath))
         )
         worker.signals.error.connect(
-            lambda msg, k=key: self._on_download_error(k, msg)
+            lambda msg, k=key, w=worker: (self._untrack_worker(k, w), self._on_download_error(k, msg))
+        )
+        worker.signals.cancelled.connect(
+            lambda k=key, w=worker: (self._untrack_worker(k, w), self._on_download_cancelled(k))
         )
         worker.signals.status.connect(self._set_status)
         self._pool.start(worker)
 
+    def _untrack_worker(self, key: str, worker):
+        """Remove a finished/errored/cancelled worker from _active_downloads."""
+        lst = self._active_downloads.get(key)
+        if lst and worker in lst:
+            lst.remove(worker)
+            if not lst:
+                self._active_downloads.pop(key, None)
+
+    def _cancel_download(self, key: str):
+        """Request cancellation of every active DownloadWorker for this row."""
+        workers = self._active_downloads.get(key, [])
+        if not workers:
+            return
+        for w in list(workers):
+            w.cancel()
+        name = self._row_items.get(key, {}).get("name", key)
+        self._log(f"Cancelling download: {name}")
+
     def _on_download_progress(self, key: str, bytes_recv: int, total_bytes: int):
-        row = self._row_index.get(key)
+        row = self._find_row(key)
         if row is None:
             return
         pbar = self._table.cellWidget(row, COL_PROGRESS)
@@ -2278,7 +2552,7 @@ class MainWindow(QMainWindow):
             if item:
                 self._auto_delete_from_torbox(key, item)
 
-        row = self._row_index.get(key)
+        row = self._find_row(key)
         if row is None:
             return
         pbar = self._table.cellWidget(row, COL_PROGRESS)
@@ -2326,7 +2600,7 @@ class MainWindow(QMainWindow):
         self._log(f"Download error: {msg}", "ERROR")
         self._set_status(f"Download failed — {msg}")
 
-        row = self._row_index.get(key)
+        row = self._find_row(key)
         if row is None:
             return
         pbar = self._table.cellWidget(row, COL_PROGRESS)
@@ -2346,6 +2620,47 @@ class MainWindow(QMainWindow):
             dl_btn.clicked.connect(lambda checked, k=key: self._on_download_clicked(k))
             dl_btn.setText("Retry")
             dl_btn.setEnabled(True)
+
+    def _on_download_cancelled(self, key: str):
+        """
+        Slot for DownloadWorker.signals.cancelled — the item is still Ready on
+        TorBox, the user just stopped the local pull, so the row goes back to
+        a normal downloadable state rather than an error state.
+        """
+        count = self._downloading.get(key, 1) - 1
+        if count > 0:
+            self._downloading[key] = count
+        else:
+            self._downloading.pop(key, None)
+        self._try_start_queued()
+        self._update_poll_interval()
+
+        name = self._row_items.get(key, {}).get("name", key)
+        self._log(f"Download cancelled: {name}")
+        self._set_status("Download cancelled")
+
+        row = self._find_row(key)
+        # If other files from the same multi-file torrent are still downloading,
+        # leave the row's progress/button state alone until they all finish.
+        if row is None or key in self._downloading:
+            return
+
+        item   = self._row_items.get(key, {})
+        status = _torbox_state_to_status(item) if item else STATUS_READY
+        pbar   = self._table.cellWidget(row, COL_PROGRESS)
+        if isinstance(pbar, QProgressBar):
+            pbar.setRange(0, 100)
+            pbar.setValue(_parse_progress(item) if item else 0)
+            self._style_progress_bar(pbar, status)
+        dl_btn = self._table.cellWidget(row, COL_DOWNLOAD)
+        if isinstance(dl_btn, QPushButton):
+            try:
+                dl_btn.clicked.disconnect()
+            except RuntimeError:
+                pass
+            dl_btn.clicked.connect(lambda checked, k=key: self._on_download_clicked(k))
+            dl_btn.setText("Download")
+            dl_btn.setEnabled(status == STATUS_READY)
 
     def _auto_delete_from_torbox(self, key: str, item: dict):
         """Fire a DeleteWorker to remove the item from TorBox after a completed download."""
@@ -2428,7 +2743,12 @@ class MainWindow(QMainWindow):
         """Submit any .torrent or .nzb files in the folder not already processed."""
         if not os.path.isdir(folder):
             return
-        for fname in os.listdir(folder):
+        try:
+            entries = os.listdir(folder)
+        except OSError as exc:
+            self._log(f"Watch folder scan failed: {exc}", "WARN")
+            return
+        for fname in entries:
             if not fname.lower().endswith((".torrent", ".nzb")):
                 continue
             fpath = os.path.join(folder, fname)
@@ -2504,10 +2824,7 @@ class MainWindow(QMainWindow):
             self._remove_row(key)
             return
 
-        name        = item.get("name", key)
-        source_type = item.get("source_type", "")
-        item_id     = item.get("id")
-        api_key     = self.config.get("api_key", "")
+        name = item.get("name", key)
 
         # Confirm before doing anything — confirmation stays on main thread (correct)
         reply = QMessageBox.question(
@@ -2518,6 +2835,20 @@ class MainWindow(QMainWindow):
         )
         if reply != QMessageBox.StandardButton.Yes:
             return
+
+        self._delete_item(key, item)
+
+    def _delete_item(self, key: str, item: dict):
+        """
+        Fire the TorBox delete API call for a single item and remove its row.
+
+        No confirmation here — the caller (single-row delete or a bulk-delete
+        batch) is responsible for confirming with the user first.
+        """
+        name        = item.get("name", key)
+        source_type = item.get("source_type", "")
+        item_id     = item.get("id")
+        api_key     = self.config.get("api_key", "")
 
         # Build the delete callable based on type
         if source_type in ("torrent", "magnet"):

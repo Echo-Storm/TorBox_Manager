@@ -18,6 +18,7 @@
 # Network exceptions are caught here and converted to the same dict shape —
 # nothing raises out of this module.
 
+import concurrent.futures
 import os
 import requests
 
@@ -241,9 +242,19 @@ def list_all(api_key: str) -> dict:
     results   = []
     errors    = []
 
+    # The three endpoints are independent — fire them concurrently instead of
+    # sequentially so a slow/degraded response from one doesn't multiply the
+    # total poll latency by three (each call has its own 20s timeout).
+    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+        torrents_future = executor.submit(list_torrents, api_key)
+        webdl_future     = executor.submit(list_webdl, api_key)
+        usenet_future    = executor.submit(list_usenet, api_key)
+        torrents = torrents_future.result()
+        webdl    = webdl_future.result()
+        usenet   = usenet_future.result()
+
     # Torrents and magnets both come from the same endpoint.
     # TorBox distinguishes them via a "magnet" boolean in each item.
-    torrents = list_torrents(api_key)
     if torrents["success"] and isinstance(torrents["data"], list):
         for item in torrents["data"]:
             # magnet field is a string (the magnet URI) for magnet adds,
@@ -253,7 +264,6 @@ def list_all(api_key: str) -> dict:
     elif not torrents["success"]:
         errors.append(f"Torrents: {torrents['detail']}")
 
-    webdl = list_webdl(api_key)
     if webdl["success"] and isinstance(webdl["data"], list):
         for item in webdl["data"]:
             item["source_type"] = "webdl"
@@ -261,7 +271,6 @@ def list_all(api_key: str) -> dict:
     elif not webdl["success"]:
         errors.append(f"Web DL: {webdl['detail']}")
 
-    usenet = list_usenet(api_key)
     if usenet["success"] and isinstance(usenet["data"], list):
         for item in usenet["data"]:
             item["source_type"] = "usenet"

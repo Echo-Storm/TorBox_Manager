@@ -61,6 +61,20 @@ except ImportError:
 EXTRACTABLE_EXTENSIONS = {".zip", ".7z", ".rar", ".tar",
                            ".tar.gz", ".tar.bz2", ".tar.xz", ".tgz"}
 
+# Windows reserved device names — illegal as a filename stem regardless of extension
+_WINDOWS_RESERVED_NAMES = {
+    "CON", "PRN", "AUX", "NUL",
+    *(f"COM{i}" for i in range(1, 10)),
+    *(f"LPT{i}" for i in range(1, 10)),
+}
+
+
+def _is_within_directory(directory: str, target: str) -> bool:
+    """True if `target` resolves to a path inside `directory` (no traversal escape)."""
+    directory = os.path.abspath(directory)
+    target    = os.path.abspath(target)
+    return os.path.commonpath([directory, target]) == directory
+
 
 # ---------------------------------------------------------------------------
 # Signal containers
@@ -79,10 +93,11 @@ class PollSignals(QObject):
 
 class DownloadSignals(QObject):
     """Signals emitted by DownloadWorker."""
-    progress = pyqtSignal(int, int)  # (bytes_received, total_bytes)
-    finished = pyqtSignal(str)       # full local file path
-    error    = pyqtSignal(str)       # human-readable error string
-    status   = pyqtSignal(str)       # log-ready status string
+    progress  = pyqtSignal(int, int)  # (bytes_received, total_bytes)
+    finished  = pyqtSignal(str)       # full local file path
+    error     = pyqtSignal(str)       # human-readable error string
+    status    = pyqtSignal(str)       # log-ready status string
+    cancelled = pyqtSignal()          # user-requested cancel completed cleanly
 
 
 class AddSignals(QObject):
@@ -231,6 +246,16 @@ class DownloadWorker(QRunnable):
         self.file_id      = file_id    # explicit file to download; None for webdl/usenet
         self.file_name    = file_name  # optional per-file name for multi-file torrents
         self.signals      = DownloadSignals()
+        self._cancelled   = False
+
+    def cancel(self):
+        """
+        Request cancellation. Safe to call from the main thread — this only
+        sets a flag; the streaming loop checks it between chunks and stops
+        there, so cancellation is not instant but is always clean (no partial
+        .part file left behind).
+        """
+        self._cancelled = True
 
     # ------------------------------------------------------------------
     # Main entry point
@@ -350,6 +375,8 @@ class DownloadWorker(QRunnable):
         try:
             with open(part_path, "wb") as fh:
                 for chunk in response.iter_content(chunk_size=DOWNLOAD_CHUNK_SIZE):
+                    if self._cancelled:
+                        break
                     if chunk:
                         fh.write(chunk)
                         received_bytes += len(chunk)
@@ -367,6 +394,17 @@ class DownloadWorker(QRunnable):
                 os.remove(part_path)
             except OSError:
                 pass
+            return
+        finally:
+            response.close()
+
+        if self._cancelled:
+            try:
+                os.remove(part_path)
+            except OSError:
+                pass
+            self.signals.status.emit(f"Download cancelled: {final_name}")
+            self.signals.cancelled.emit()
             return
 
         # Rename .part -> final only after a clean write
@@ -419,8 +457,23 @@ class DownloadWorker(QRunnable):
         # Sanitise: remove characters Windows won't allow in filenames
         filename = re.sub(r'[\\/:*?"<>|]', "_", filename)
         filename = filename.strip(". ")
+        filename = filename or "download"
 
-        return filename or "download"
+        # Guard against Windows reserved device names (CON, NUL, COM1, ...) —
+        # matched on the stem only, case-insensitive. Windows treats these as
+        # special regardless of extension (e.g. "CON.txt" is still illegal).
+        stem, ext = os.path.splitext(filename)
+        if stem.upper() in _WINDOWS_RESERVED_NAMES:
+            filename = f"_{stem}{ext}"
+
+        # Keep the filename well under Windows' 260-char MAX_PATH even after
+        # a download-dir + per-item-subfolder prefix and the ".part" suffix.
+        # Truncate the stem only, so the extension survives.
+        if len(filename) > 150:
+            stem, ext = os.path.splitext(filename)
+            filename = stem[:max(1, 150 - len(ext))] + ext
+
+        return filename
 
 
 # ---------------------------------------------------------------------------
@@ -594,26 +647,43 @@ class ExtractWorker(QRunnable):
     @staticmethod
     def _extract_zip(path: str, dest: str):
         with zipfile.ZipFile(path, "r") as zf:
-            zf.extractall(dest)
+            names = zf.namelist()
+            for name in names:
+                if not _is_within_directory(dest, os.path.join(dest, name)):
+                    raise ValueError(f"Blocked path-traversal entry in archive: {name}")
+            zf.extractall(dest, members=names)
 
     @staticmethod
     def _extract_tar(path: str, dest: str):
         with tarfile.open(path, "r:*") as tf:
             # filter='data' (Python 3.12+) blocks path-traversal entries.
-            # Falls back silently on older Python versions.
+            # On older Python, validate every member's resolved path manually
+            # before extracting anything, so a malicious archive can't write
+            # outside `dest` (Zip Slip).
             try:
                 tf.extractall(dest, filter="data")
             except TypeError:
-                tf.extractall(dest)
+                members = tf.getmembers()
+                for member in members:
+                    if not _is_within_directory(dest, os.path.join(dest, member.name)):
+                        raise ValueError(f"Blocked path-traversal entry in archive: {member.name}")
+                tf.extractall(dest, members=members)
 
     @staticmethod
     def _extract_7z(path: str, dest: str):
         with py7zr.SevenZipFile(path, mode="r") as sz:
+            for name in sz.getnames():
+                if not _is_within_directory(dest, os.path.join(dest, name)):
+                    raise ValueError(f"Blocked path-traversal entry in archive: {name}")
             sz.extractall(path=dest)
 
     @staticmethod
     def _extract_rar(path: str, dest: str):
         with rarfile.RarFile(path) as rf:
+            names = rf.namelist()
+            for name in names:
+                if not _is_within_directory(dest, os.path.join(dest, name)):
+                    raise ValueError(f"Blocked path-traversal entry in archive: {name}")
             rf.extractall(dest)
 
     @staticmethod

@@ -1,5 +1,5 @@
 # TorBox Manager — EchoStorm Edition
-# Project Specification v0.7.2
+# Project Specification v0.7.5
 
 ---
 
@@ -160,6 +160,16 @@ layout, not `QMainWindow.setStatusBar()`, so the border runs through it uninterr
 | Download | Yes | Enabled when status=Ready; becomes "Open" after local download; "Retry" on error |
 | Delete | Yes | Confirms then calls TorBox delete API; row removed optimistically |
 
+Selection mode is `ExtendedSelection` (Ctrl/Shift-click for multiple rows). Right-clicking
+inside a multi-row selection shows a bulk menu ("Download Selected (N)", "Delete Selected (N)")
+instead of the single-item menu; right-clicking outside the selection acts on just that row.
+
+Column headers are sortable (click to sort). Row lookups used by live actions (download
+dispatch, progress/finished/error/cancelled handlers, delete, clear) go through
+`_find_row(key)`, which verifies the cached `_row_index` entry against the table and repairs
+it on a mismatch — this is what keeps those actions correct immediately after a user re-sorts,
+rather than depending on `_row_index` being rebuilt only once per poll.
+
 ---
 
 ## History Table Columns
@@ -195,8 +205,14 @@ All workers communicate back to the main thread via Qt signals only.
 - Takes explicit `file_id` — caller decides which file; no silent fallback to files[0]
 - Retries link resolution up to 3 times with 3 s delay (TorBox transient errors)
 - Writes to `filename.part` during download; renames to final name on completion
-- Incomplete `.part` files deleted on error
-- Filename from Content-Disposition (RFC 5987 + plain fallback); URL-decoded and sanitised
+- Incomplete `.part` files deleted on error or on user cancellation
+- Filename from Content-Disposition (RFC 5987 + plain fallback); URL-decoded, sanitised
+  against illegal Windows characters, Windows reserved device names (`CON`, `NUL`, `COM1`,
+  etc.), and truncated to stay well under `MAX_PATH` once combined with a subfolder prefix
+- Cancellable: `cancel()` sets a flag checked between chunks in the streaming loop; a
+  cancelled download cleans up its `.part` file and emits `signals.cancelled` instead of
+  `signals.finished`/`signals.error`. `ui.py` tracks live workers per row key in
+  `_active_downloads` so a right-click "Cancel Download" can reach them.
 
 ### Multi-file torrent flow
 1. User clicks Download on a torrent row
@@ -208,8 +224,13 @@ All workers communicate back to the main thread via Qt signals only.
 
 ### Concurrency
 - `_downloading: dict[str, int]` — maps row_key to count of active workers
+- `_active_downloads: dict[str, list]` — live `DownloadWorker` instances per row_key, so an
+  in-progress download can be cancelled (right-click row → "Cancel Download")
 - `_download_queue: list[tuple[str, dict]]` — FIFO queue for pending downloads
-- On each worker finish/error: decrement count; drain queue up to the concurrency limit
+- On each worker finish/error/cancel: decrement count; drain queue up to the concurrency limit
+- "Download All" and the multi-select "Download Selected" bulk action both estimate total
+  size against `shutil.disk_usage(download_dir).free` first and confirm with the user before
+  proceeding if there isn't enough room (best-effort — skipped if the download dir isn't set)
 
 ---
 
@@ -223,6 +244,10 @@ All workers communicate back to the main thread via Qt signals only.
 | + NZB | QFileDialog `.nzb` | File must exist |
 
 All four run on a background `AddWorker` thread — the UI is never blocked.
+
+Adding a magnet link already present in the queue (matched via TorBox's own `magnet` field
+on the item) prompts a "possible duplicate — add anyway?" confirmation first. Hoster links
+aren't checked — TorBox doesn't echo back a stable field to compare the original URL against.
 
 ---
 
@@ -244,8 +269,16 @@ All four run on a background `AddWorker` thread — the UI is never blocked.
   `.7z` (py7zr, optional), `.rar` (rarfile + unrar, optional)
 - Runs on `ExtractWorker` background thread — UI never blocks during extraction
 - `filter="data"` passed to `tarfile.extractall` on Python 3.12+ to suppress deprecation
-  warning and block path-traversal entries; falls back gracefully on older Python
+  warning and block path-traversal entries; on older Python the same protection is applied
+  manually (see below)
 - Optionally deletes the archive file after successful extraction (`delete_after_extract`)
+
+**Path-traversal (Zip Slip) protection**: every member of a `.zip`, `.7z`, or `.rar` archive
+— and tar members on the Python < 3.12 fallback path — has its resolved destination path
+checked against the extraction directory before anything is extracted. If any member would
+land outside the destination (`../` traversal, an absolute path, etc.) the whole extraction
+is aborted with an error rather than partially extracting. Necessary because `auto_extract`
+defaults on and archive contents are untrusted (arbitrary torrents/hosters).
 
 ---
 
@@ -266,10 +299,20 @@ All four run on a background `AddWorker` thread — the UI is never blocked.
 - `QTimer` drives `PollWorker` at the configured interval (default 30 s, range 10–300 s)
 - `bypass_cache=true` on all list endpoints — required to get fresh data instead of TorBox's
   server-side cached snapshot
+- `api.list_all()` fetches the torrents/webdl/usenet endpoints concurrently
+  (`concurrent.futures.ThreadPoolExecutor`, 3 workers) rather than sequentially, so a slow
+  response from one endpoint doesn't multiply total poll latency by three
+- `_poll_in_flight` guard — a new poll is skipped if the previous one hasn't returned yet,
+  preventing two in-flight `PollWorker`s from racing and letting a stale response overwrite
+  fresher table state
 - Idle slowdown: when window is hidden to tray and no downloads are active, interval rises
   to `max(configured, 300)` seconds to reduce API load
 - `_deleted_keys: set[str]` — suppresses items for one poll cycle after user deletes them
   so they don't flicker back before TorBox finishes processing the delete
+- `_missing_polls: dict[str, int]` — an item present in `_row_items` but absent from 3
+  consecutive poll responses (removed via the TorBox web UI, expired, etc.) is dropped from
+  the table; a single miss is treated as a transient blip and left alone. Rows with an active
+  local download are never auto-dropped this way.
 
 ---
 

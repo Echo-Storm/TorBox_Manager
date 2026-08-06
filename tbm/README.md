@@ -1,6 +1,6 @@
 # TorBox Manager — EchoStorm Edition
 
-![TorBox Manager](TorboxManager.jpg)
+![TorBox Manager](../TorboxManager.jpg)
 
 A desktop queue manager for [TorBox](https://torbox.app) debrid. Add torrents, magnets, hoster links, and NZBs — watch them process on TorBox's servers — download finished files straight to your machine. No browser tab required.
 
@@ -45,15 +45,16 @@ When the app opens it'll ask for your **API key** and a **download folder**. Fil
 
 - **Add anything** — magnet links, .torrent files, hoster URLs (1Fichier, Mega, Pixeldrain etc.), and .nzb files
 - **Unified queue** — everything in one table regardless of type, with live status, size, seeds, peers, ETA, and progress bars
-- **Queue filter** — search bar above the table filters rows by name in real time; stays active across poll cycles
+- **Sortable, filterable, multi-select** — click any column header to sort; search bar filters rows by name in real time; Ctrl/Shift-click rows for bulk Download or Delete from the right-click menu
 - **Multi-file torrents** — pick exactly which files you want before downloading; one worker per file, all in parallel
-- **Downloads to your folder** — streams directly to disk with a live progress bar; each item gets its own named subfolder automatically
-- **Auto-extract** — archives (.zip, .rar, .7z, .tar.*) are extracted on a background thread immediately after download; optionally deletes the archive after extraction
+- **Downloads to your folder** — streams directly to disk with a live progress bar; each item gets its own named subfolder automatically; cancel an in-progress download anytime from the right-click menu
+- **Auto-extract** — archives (.zip, .rar, .7z, .tar.*) are extracted on a background thread immediately after download, with path-traversal protection against malicious archives; optionally deletes the archive after extraction
 - **Watch folder** — drop .torrent or .nzb files into a folder and they get submitted to TorBox automatically, with a delete-after-submit option
 - **Download history** — every completed download is logged; the History tab shows them all newest-first with double-click to open in Explorer and right-click to copy the path
-- **Controlled downloads** — concurrency limit (default 3) keeps your connection usable; Download All queues the rest and drains the queue as slots free up
-- **Right-click rows** — Copy Name, Copy Download Link, Open in Browser (hoster links) — right on the row
+- **Controlled downloads** — concurrency limit (default 3) keeps your connection usable; Download All (and bulk-selected downloads) warn first if there isn't enough free disk space, then queue the rest and drain as slots free up
+- **Right-click rows** — Copy Name, Copy Download Link, Open in Browser (hoster links), Cancel Download — right on the row
 - **Multi-link hoster input** — paste a batch of hoster URLs at once, one per line
+- **Duplicate warning** — adding a magnet already in your queue asks first instead of silently double-submitting
 - **Update notifications** — checks GitHub Releases silently on startup; a button appears in the status bar if a newer version is out
 - **Stays out of your way** — minimizes to the system tray, slows polling to 5-minute intervals when idle
 - **Tray notifications** — optional popup when a download finishes (off by default)
@@ -107,6 +108,14 @@ These need optional packages — `rarfile` (+ unrar.exe or WinRAR in PATH for .r
 ---
 
 ## Version history
+
+**v0.7.5** — Security fix (archive path-traversal/"Zip Slip" protection in auto-extract) and a
+bugfix + feature sweep: Clear All no longer corrupts history for in-flight downloads, poll
+responses can no longer race each other, items removed elsewhere on TorBox are now cleaned up
+automatically, filenames are hardened against Windows reserved names and path-length limits.
+New: multi-select with bulk Download/Delete, sortable columns, cancel an in-progress download,
+duplicate-magnet warning, low-disk-space warning before batch downloads. Faster polling
+(concurrent endpoint fetches) and less table churn on large queues.
 
 **v0.7.4** — Sharp taskbar icon (multi-size ICO bundled and used for window icon)
 

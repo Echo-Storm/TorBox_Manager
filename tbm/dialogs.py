@@ -527,7 +527,16 @@ class SettingsDialog(QDialog):
         btn_layout.addWidget(buttons)
         outer.addWidget(btn_container)
 
-        # ---- API Key ----
+        self._build_api_key_section(layout)
+        self._build_download_dir_section(layout)
+        self._build_behaviour_section(layout)
+        self._build_watch_folder_section(layout)
+        self._build_concurrency_section(layout)
+        self._build_poll_section(layout)
+
+        layout.addStretch()
+
+    def _build_api_key_section(self, layout):
         layout.addWidget(_section_label("TorBox API Key"))
 
         key_row = QHBoxLayout()
@@ -547,7 +556,7 @@ class SettingsDialog(QDialog):
             "Found at torbox.app -> Account -> API. Stored locally in config.json."
         ))
 
-        # ---- Download Directory ----
+    def _build_download_dir_section(self, layout):
         layout.addWidget(_section_label("Download Directory"))
 
         dir_row = QHBoxLayout()
@@ -568,7 +577,7 @@ class SettingsDialog(QDialog):
             "Leave blank to be prompted on first download."
         ))
 
-        # ---- Behaviour toggles ----
+    def _build_behaviour_section(self, layout):
         layout.addWidget(_section_label("Behaviour"))
 
         self._tray_cb = QCheckBox("Minimize to system tray on close")
@@ -609,7 +618,7 @@ class SettingsDialog(QDialog):
         # Set initial enabled state for the delete-after checkbox
         self._toggle_extract_controls(self._extract_cb.isChecked())
 
-        # ---- Watch Folder ----
+    def _build_watch_folder_section(self, layout):
         layout.addWidget(_section_label("Watch Folder"))
 
         self._watch_enabled_cb = QCheckBox("Watch a folder and auto-submit .torrent and .nzb files")
@@ -640,7 +649,7 @@ class SettingsDialog(QDialog):
 
         self._toggle_watch_folder_controls(self._watch_enabled_cb.isChecked())
 
-        # ---- Download concurrency ----
+    def _build_concurrency_section(self, layout):
         layout.addWidget(_section_label("Concurrent Downloads"))
 
         concur_row = QHBoxLayout()
@@ -658,7 +667,7 @@ class SettingsDialog(QDialog):
             "Download All queues the rest and starts them as slots free up."
         ))
 
-        # ---- Poll Interval ----
+    def _build_poll_section(self, layout):
         layout.addWidget(_section_label("Queue Refresh Interval"))
 
         poll_row = QHBoxLayout()
@@ -680,8 +689,6 @@ class SettingsDialog(QDialog):
             f"How often to check TorBox for status updates. "
             f"({MIN_POLL_INTERVAL_SEC}-{MAX_POLL_INTERVAL_SEC} seconds)"
         ))
-
-        layout.addStretch()
 
     def _toggle_key_visibility(self, checked: bool):
         mode = QLineEdit.EchoMode.Normal if checked else QLineEdit.EchoMode.Password
@@ -904,7 +911,7 @@ class FilePickerDialog(QDialog):
             cb = QCheckBox()
             cb.setChecked(True)
             cb.stateChanged.connect(self._update_ok_button)
-            cb_widget = QLabel()   # wrapper so we can center the checkbox
+            cb_widget = QWidget()   # wrapper so we can center the checkbox
             cb_layout = QHBoxLayout(cb_widget)
             cb_layout.setContentsMargins(4, 0, 0, 0)
             cb_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)

@@ -2,6 +2,77 @@
 
 ---
 
+## v0.7.5 — 2026-08-06
+
+### Security
+- **Zip Slip path traversal in auto-extract** — `.zip`, `.7z`, and `.rar` extraction
+  trusted archive member paths and extracted them unchecked; since `auto_extract`
+  defaults to on and archives come from arbitrary torrents/hosters, a malicious
+  archive could write files outside the download folder. All four formats
+  (including the tar fallback on Python < 3.12) now validate every member's
+  resolved path stays inside the destination directory before extracting
+  anything; a violation aborts the whole extraction instead of extracting
+  partially.
+
+### Fixes
+- **Clear All corrupted history for in-flight downloads** — clearing the queue
+  while a download was still running wiped the item data a moment later needed
+  to record it in history, producing a blank-name history entry. Clear All now
+  asks for confirmation and leaves rows with an active local download in place.
+- **Poll responses could race** — a new poll was submitted every tick even if
+  the previous one hadn't returned, so a slow/degraded API response could let
+  a stale poll overwrite fresher table state. A new poll is now skipped while
+  one is already in flight.
+- **Items removed on TorBox's side lingered forever** — if an item was deleted
+  via the TorBox web UI (or expired) it previously stayed in the table
+  indefinitely. Rows missing for 3 consecutive polls are now dropped
+  automatically; a single missed poll is treated as a transient blip and left
+  alone. Rows with an active local download are never auto-dropped.
+- **Filenames could hit Windows reserved device names or MAX_PATH** —
+  downloaded filenames are now checked against reserved names (`CON`, `NUL`,
+  `COM1`, etc.) and the stem is truncated when combined with a per-item
+  subfolder would risk exceeding Windows' path length limit.
+
+### Features
+- **Multi-select + bulk actions** — the queue table now supports selecting
+  multiple rows (Ctrl/Shift-click) with "Download Selected" (also covered by
+  the low-disk-space check below) and "Delete Selected" in the right-click
+  menu.
+- **Sortable queue table** — click any column header to sort. Row lookups now
+  self-heal on every access (`_find_row`) instead of trusting a cache that a
+  live sort click can invalidate between polls, so Delete/Download/Cancel and
+  in-progress download updates always target the correct row even immediately
+  after re-sorting.
+- **Cancel an in-progress download** — right-click a row that's actively
+  downloading locally for a "Cancel Download" action. Cleans up the partial
+  `.part` file; the item goes back to a normal Ready state since it's untouched
+  on TorBox's side.
+- **Duplicate-magnet warning** — adding a magnet link already present in the
+  queue now asks for confirmation first.
+- **Low disk space warning on Download All** — estimates total size against
+  free space in the download directory and confirms before proceeding if
+  there isn't enough room.
+
+### Performance
+- **Faster polling** — the three TorBox list endpoints (torrents/webdl/usenet)
+  are now fetched concurrently instead of sequentially, so a slow response
+  from one no longer multiplies total poll latency.
+- **Fewer redundant table updates** — Seeds/Peers/Ratio/ETA/Added cells now
+  only get a `setText()` call when their value actually changed, instead of a
+  fresh cell being allocated every poll regardless.
+
+### Cleanup
+- Consolidated duplicated status-classification logic in `ui.py` behind a
+  single `_classify_download_state()` helper.
+- `FilePickerDialog`'s checkbox cell no longer misuses `QLabel` as a generic
+  layout container — now a plain `QWidget`.
+- `SettingsDialog._build_ui` split into one helper method per settings
+  section instead of one ~190-line function.
+- `_scan_watch_folder` no longer raises on a transiently unavailable folder
+  (e.g. a network share hiccup) — logs a warning and retries next scan instead.
+
+---
+
 ## v0.7.4 — 2026-06-11
 
 ### Fixes
