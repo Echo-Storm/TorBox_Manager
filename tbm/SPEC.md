@@ -1,5 +1,5 @@
 # TorBox Manager — EchoStorm Edition
-# Project Specification v1.1.0
+# Project Specification v1.2.0
 
 ---
 
@@ -116,7 +116,7 @@ calls from a background thread.
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────┐
-│  v1.1.0  ────────── | TORBOX MANAGER | ────────── ECHOSTORM EDITION       │
+│  v1.2.0  ────────── | TORBOX MANAGER | ────────── ECHOSTORM EDITION       │
 ├──────────────────┬───────────────────────────────────────────────────────┤
 │  LEFT PANEL      │  [Queue] [History]          ← tab bar                 │
 │  (fixed 220px)   ├───────────────────────────────────────────────────────┤
@@ -330,6 +330,28 @@ aren't checked — TorBox doesn't echo back a stable field to compare the origin
 
 ---
 
+## Drag-and-Drop (v1.2.0)
+
+- `MainWindow.setAcceptDrops(True)`; `dragEnterEvent`/`dragMoveEvent`/`dropEvent`/
+  `dragLeaveEvent` overrides accept a drag anywhere over the window when it contains at
+  least one local `.torrent` or `.nzb` file path
+- `_dropped_torrent_nzb_paths(mime_data)` — pure filter, no side effects — extracts only
+  valid local `.torrent`/`.nzb` paths that actually exist on disk from a `QMimeData`,
+  ignoring anything else in the same drop (other file types, non-local URLs, dragged text)
+- `_submit_dropped_file(path)` routes through the same `_submit_add()` used by the Add
+  Torrent/Add NZB buttons — same background `AddWorker`, same post-add poll refresh
+- **Deliberately distinct from Watch Folder**: a dropped file is never deleted afterward.
+  Watch Folder's delete-on-success behavior is specific to its own "process and clear this
+  folder" contract; a file dragged in from the user's Downloads folder or Desktop is
+  theirs to keep.
+- Multiple files can be dropped at once — each gets its own `AddWorker`
+- `_pre_drag_status` remembers the status bar text from before a drag started, so
+  `dragLeaveEvent` (dragged over the window, then away without dropping) restores it
+  instead of leaving "Drop to add..." stuck there — a bug found in this release's own
+  sweep, fixed before shipping
+
+---
+
 ## Auto-Extract
 
 - Triggered in `_on_download_finished` when `auto_extract=True` and file extension is recognized
@@ -380,7 +402,7 @@ defaults on and archive contents are untrusted (arbitrary torrents/hosters).
 
 ---
 
-## Tray Notifications
+## Tray Notifications & Sound
 
 - Optional (`tray_notifications` config key, off by default) popup when a download completes
 - v1.1.0: clicking the balloon opens that file's folder in Explorer (`messageClicked` signal
@@ -390,6 +412,13 @@ defaults on and archive contents are untrusted (arbitrary torrents/hosters).
   recently, same "most recent wins" simplification already used for multi-file progress
   display. Explicitly cleared to `None` before the (path-less) "running in the tray"
   minimize notice, so clicking that one doesn't try to open a stale previous download.
+- **v1.2.0**: optional (`play_sound_on_complete`, off by default) system sound via
+  `winsound.MessageBeep(MB_ICONASTERISK)` — Windows-only stdlib, imported lazily inside
+  `_play_complete_sound()` rather than at module top-level, same pattern as
+  `_apply_startup_setting`'s `import winreg`. Fires from the same per-file point in
+  `_on_download_finished` as the tray notification, for consistency — a multi-file torrent
+  plays once per file, matching the tray notification's own already-accepted behavior
+  rather than introducing a second, different multi-file convention.
 
 ---
 
@@ -485,6 +514,7 @@ defaults on and archive contents are untrusted (arbitrary torrents/hosters).
 | `watch_folder_delete` | bool | `true` | Delete file from watch folder on success |
 | `delete_from_torbox` | bool | `false` | Delete TorBox entry after local download |
 | `run_at_startup` | bool | `false` | Launch automatically at Windows login (HKCU Run key) |
+| `play_sound_on_complete` | bool | `false` | Play a system sound when a download finishes |
 
 `config.py` deep-merges saved values over `DEFAULTS` on load so new keys added in later
 versions are never silently missing for users upgrading from an older config file.
@@ -507,3 +537,12 @@ so the suite never leaves a startup entry behind on the machine that runs it.
 a regression test for the concurrency-bypass bug described above), tray notification
 click-to-open, type/status filtering, account bandwidth stats, and settings export/import —
 same fakes-not-real-network-calls approach as the rest of the suite.
+
+`test_v12_features.py` (v1.2.0) covers the icon fixes (asserts the flagged emoji-presentation
+characters are gone from `ui.py` and their replacements are present), drag-and-drop (using
+real `QMimeData`/`QUrl` objects rather than a full `QDropEvent`, matching this suite's
+established preference for testing handler methods over event-construction plumbing — see
+`_dropped_torrent_nzb_paths`/`_submit_dropped_file`), the drag-leave status-restore
+regression, and the download-complete sound (`_play_complete_sound` runs for real against
+this Windows test environment's actual `winsound`, since there's nothing unsafe about
+letting a short system beep play during a test run).

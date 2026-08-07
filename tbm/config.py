@@ -33,6 +33,7 @@ DEFAULTS = {
     "columns":                  dict(COL_VISIBILITY_DEFAULTS),  # optional column visibility
     "minimize_to_tray":         True,   # hide to tray on close vs quit
     "tray_notifications":       False,  # show tray popup when a download finishes
+    "play_sound_on_complete":   False,  # play a system sound when a download finishes
     "window_geometry":          "",    # hex-encoded QByteArray for restoring window position/size
     "create_subfolder":         True,   # place each download in its own named subfolder
     "auto_extract":             True,   # extract archives automatically after download

@@ -2,6 +2,34 @@
 
 ---
 
+## v1.2.0 — 2026-08-07
+
+Small, focused round — 3 changes plus a bug sweep.
+
+### Fixed
+- **Three button icons rendered as colorful emoji instead of the app's plain monochrome
+  glyph style.** `⏸` (Pause All), `⬇` (Download All), and `⬆` (Update available/the
+  version-available button text) are in Unicode ranges that default to emoji presentation
+  on Windows, unlike the plain arrow/symbol glyphs used everywhere else in the app (↻ ✓ ✕
+  ⟳ ▶). Swapped for `‖`, `↓`, `↑` — visually equivalent, plain-arrows-block characters
+  with no emoji fallback at all, so this can't silently regress on a font/OS update the
+  way the variation-selector approach could have.
+
+### Features
+- **Drag-and-drop** — drop a `.torrent` or `.nzb` file straight onto the window and it's
+  added immediately. Separate from Watch Folder: dropped files are never deleted
+  afterward (Watch Folder's delete-on-success behavior is specific to its own
+  "process and clear this folder" contract). Supports dropping multiple files at once.
+- **Sound on download complete** — optional (off by default), alongside the existing tray
+  notification toggle in Settings.
+
+### Fixed (bug sweep)
+- Dragging a file over the window and away again without dropping left "Drop to add..."
+  stuck in the status bar until something else happened to update it. Now restores
+  whatever was showing before the drag started.
+
+---
+
 ## v1.1.0 — 2026-08-06
 
 Additive feature round on top of v1.0.0 — no architecture changes, just rounding out

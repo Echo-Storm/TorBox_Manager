@@ -614,6 +614,10 @@ class SettingsDialog(QDialog):
             "Off by default."
         ))
 
+        self._sound_cb = QCheckBox("Play a sound when a download finishes")
+        self._sound_cb.setChecked(self._config.get("play_sound_on_complete", False))
+        layout.addWidget(self._sound_cb)
+
         self._torbox_delete_cb = QCheckBox("Remove item from TorBox after local download completes")
         self._torbox_delete_cb.setChecked(self._config.get("delete_from_torbox", False))
         layout.addWidget(self._torbox_delete_cb)
@@ -828,6 +832,7 @@ class SettingsDialog(QDialog):
         updated["minimize_to_tray"]      = self._tray_cb.isChecked()
         updated["run_at_startup"]        = self._startup_cb.isChecked()
         updated["tray_notifications"]    = self._notify_cb.isChecked()
+        updated["play_sound_on_complete"] = self._sound_cb.isChecked()
         updated["create_subfolder"]      = self._subfolder_cb.isChecked()
         updated["auto_extract"]          = self._extract_cb.isChecked()
         updated["delete_after_extract"]  = self._delete_cb.isChecked()

@@ -68,6 +68,7 @@ When the app opens it'll ask for your **API key** and a **download folder**. Fil
 - **Downloads to your folder** — streams directly to disk with a live progress bar and an aggregate speed/remaining-size readout; each item gets its own named subfolder automatically
 - **Auto-extract** — archives (.zip, .rar, .7z, .tar.*) are extracted on a background thread immediately after download, with path-traversal protection against malicious archives; optionally deletes the archive after extraction
 - **Watch folder** — drop .torrent or .nzb files into a folder and they get submitted to TorBox automatically, with a delete-after-submit option
+- **Drag-and-drop** — drop a .torrent or .nzb file straight onto the window and it's added immediately; separate from Watch Folder, so the file you dropped is never deleted afterward
 - **Download history** — every completed download is logged; the History tab shows them all newest-first with double-click to open in Explorer and right-click to copy the path
 - **Controlled downloads** — concurrency limit (default 3) keeps your connection usable; Download All (and bulk-selected downloads) warn first if there isn't enough free disk space, then queue the rest and drain as slots free up; Retry All Failed re-attempts every row that errored
 - **Right-click rows** — Copy Name, Copy Magnet Link, Copy Download Link, Open in Browser (hoster links), Pause/Resume/Cancel Download — right on the row
@@ -78,6 +79,7 @@ When the app opens it'll ask for your **API key** and a **download folder**. Fil
 - **Update notifications** — checks GitHub Releases silently on startup; a button appears in the status bar if a newer version is out
 - **Stays out of your way** — minimizes to the system tray, slows polling to 5-minute intervals when idle, and can launch automatically at Windows startup
 - **Tray notifications** — optional popup when a download finishes (off by default); click it to jump straight to the file
+- **Sound on complete** — optional system sound when a download finishes, alongside (or instead of) the tray popup
 - **Remembers where you left it** — window position and size restored on every launch
 
 ---
@@ -95,6 +97,7 @@ Open via the gear icon bottom-left.
 | Minimize to Tray | Hide to tray on close instead of quitting | on |
 | Run at Windows Startup | Launch automatically at login | off |
 | Tray Notifications | Popup when a download finishes | off |
+| Play Sound | System sound when a download finishes | off |
 | Create subfolder per download | Each item gets its own named subfolder | on |
 | Auto-extract archives | Extract .zip/.rar/.7z/.tar.* after download | on |
 | Delete archive after extraction | Remove archive once extracted | off |
@@ -136,6 +139,14 @@ These need optional packages — `rarfile` (+ unrar.exe or WinRAR in PATH for .r
 ---
 
 ## Version history
+
+**v1.2.0** — Small, focused round: three button icons (Pause All, Download All, Update
+available) that were rendering as colorful emoji instead of matching the app's plain
+monochrome glyph style are now fixed; drag-and-drop a .torrent or .nzb file straight onto
+the window (separate from Watch Folder — dropped files are never deleted); optional sound
+on download complete. Bug sweep caught one: dragging a file over the window and away again
+without dropping left "Drop to add..." stuck in the status bar — now restores whatever was
+showing before.
 
 **v1.1.0** — Feature round on top of v1.0.0: multi-magnet paste (Add Magnet now takes a
 batch, one per line, like Add Hoster Link), Pause All / Resume All, tray notification

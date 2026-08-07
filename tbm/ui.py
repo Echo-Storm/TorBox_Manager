@@ -584,6 +584,9 @@ class MainWindow(QMainWindow):
         # so this is a "most recent notification wins" simplification — same
         # pattern already used for multi-file progress/pause display.
         self._last_notification_path: str | None = None
+        # Status bar text to restore if a drag-and-drop is dragged away
+        # without being dropped (dragLeaveEvent). Set in dragEnterEvent.
+        self._pre_drag_status = "Ready"
         # All log lines stored as (level, formatted_string) for filter re-render
         self._log_lines: list[tuple[str, str]] = []
         # Watch folder state
@@ -610,6 +613,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(f"{APP_NAME} {APP_SUBTITLE}  •  v{APP_VERSION}")
         self.setMinimumSize(1000, 600)
         self.setStyleSheet(MAIN_STYLE)
+        self.setAcceptDrops(True)  # drag-and-drop .torrent/.nzb files onto the window
 
         # Restore saved geometry; fall back to maximized default
         saved_geom = self.config.get("window_geometry", "")
@@ -885,7 +889,7 @@ class MainWindow(QMainWindow):
         retry_all_btn.clicked.connect(self._on_retry_all_failed)
         layout.addWidget(retry_all_btn)
 
-        pause_all_btn = QPushButton("⏸  Pause All")
+        pause_all_btn = QPushButton("‖  Pause All")
         pause_all_btn.setMinimumHeight(28)
         pause_all_btn.clicked.connect(self._on_pause_all)
         layout.addWidget(pause_all_btn)
@@ -1714,7 +1718,7 @@ class MainWindow(QMainWindow):
         bar_layout.addWidget(self._speed_label)
 
         # Update available button — hidden until an update is detected
-        self._update_btn = QPushButton("⬆  Update available")
+        self._update_btn = QPushButton("↑  Update available")
         self._update_btn.setFixedHeight(22)
         self._update_btn.setStyleSheet(f"""
             QPushButton {{
@@ -1736,7 +1740,7 @@ class MainWindow(QMainWindow):
         bar_layout.addSpacing(6)
 
         # Download All — outline at rest, fills green on hover
-        dl_all_btn = QPushButton("⬇  Download All")
+        dl_all_btn = QPushButton("↓  Download All")
         dl_all_btn.setFixedHeight(22)
         dl_all_btn.setFixedWidth(118)
         dl_all_btn.setStyleSheet(f"""
@@ -2211,7 +2215,7 @@ class MainWindow(QMainWindow):
 
     def _on_update_available(self, latest: str, url: str):
         self._log(f"Update available: v{latest} — {url}")
-        self._update_btn.setText(f"⬆  v{latest} available")
+        self._update_btn.setText(f"↑  v{latest} available")
         self._update_btn.setToolTip(f"Version {latest} is available on GitHub. Click to open the releases page.")
         try:
             self._update_btn.clicked.disconnect()
@@ -3178,6 +3182,12 @@ class MainWindow(QMainWindow):
                 4000,
             )
 
+        # Sound — same per-file firing point as the tray notification above,
+        # for consistency (a multi-file torrent plays/pops once per file, an
+        # already-accepted simplification rather than a new inconsistency).
+        if self.config.get("play_sound_on_complete", False):
+            self._play_complete_sound()
+
         # Only update the row to Done state when all files for this key are finished
         if key in self._downloading:
             return
@@ -3570,6 +3580,70 @@ class MainWindow(QMainWindow):
             )
 
     # -----------------------------------------------------------------------
+    # Drag-and-drop
+    # -----------------------------------------------------------------------
+
+    @staticmethod
+    def _dropped_torrent_nzb_paths(mime_data) -> list:
+        """
+        Extract local .torrent/.nzb file paths from a QMimeData, ignoring
+        anything else that might be part of the same drop (other file types,
+        non-local URLs, dragged text, etc.).
+        """
+        if not mime_data.hasUrls():
+            return []
+        paths = []
+        for url in mime_data.urls():
+            if not url.isLocalFile():
+                continue
+            path = url.toLocalFile()
+            if path.lower().endswith((".torrent", ".nzb")) and os.path.isfile(path):
+                paths.append(path)
+        return paths
+
+    def dragEnterEvent(self, event):
+        if self._dropped_torrent_nzb_paths(event.mimeData()):
+            event.acceptProposedAction()
+            self._pre_drag_status = self._status_label.text()
+            self._set_status("Drop to add .torrent / .nzb file(s)")
+
+    def dragMoveEvent(self, event):
+        if self._dropped_torrent_nzb_paths(event.mimeData()):
+            event.acceptProposedAction()
+
+    def dragLeaveEvent(self, event):
+        """Restore whatever the status bar showed before the drag started —
+        without this, dragging a file over the window and away again (no
+        drop) leaves 'Drop to add...' stuck until something else updates it."""
+        self._set_status(self._pre_drag_status)
+
+    def dropEvent(self, event):
+        paths = self._dropped_torrent_nzb_paths(event.mimeData())
+        if not paths:
+            return
+        event.acceptProposedAction()
+        for path in paths:
+            self._submit_dropped_file(path)
+
+    def _submit_dropped_file(self, path: str):
+        """
+        Submit a .torrent or .nzb file dropped onto the window.
+
+        Deliberately does NOT delete the source file afterward — unlike Watch
+        Folder (_submit_watch_file), a file dragged in from the user's own
+        Downloads folder or Desktop is theirs to keep; only Watch Folder's
+        explicit "process and clear this folder" contract deletes on success.
+        """
+        fname   = os.path.basename(path)
+        api_key = self.config.get("api_key", "")
+        if fname.lower().endswith(".torrent"):
+            self._log(f"Adding dropped torrent: {fname}")
+            self._submit_add(lambda: api.add_torrent_file(api_key, path), "torrent")
+        elif fname.lower().endswith(".nzb"):
+            self._log(f"Adding dropped NZB: {fname}")
+            self._submit_add(lambda: api.add_nzb_file(api_key, path), "NZB")
+
+    # -----------------------------------------------------------------------
     # Tray / window close
     # -----------------------------------------------------------------------
 
@@ -3606,6 +3680,22 @@ class MainWindow(QMainWindow):
         """Clicking a download-complete balloon opens that file's folder."""
         if self._last_notification_path:
             self._open_in_explorer(self._last_notification_path)
+
+    @staticmethod
+    def _play_complete_sound():
+        """
+        Play a system notification sound. winsound is Windows-only stdlib —
+        consistent with this app's Windows-only scope (winreg is already used
+        unconditionally elsewhere) — imported lazily here rather than at
+        module top-level, matching _apply_startup_setting's import winreg.
+        Best-effort: never lets a sound-playback failure interrupt the
+        download-complete flow.
+        """
+        try:
+            import winsound
+            winsound.MessageBeep(winsound.MB_ICONASTERISK)
+        except Exception:
+            pass
 
     def _tray_show(self):
         self.showNormal()
