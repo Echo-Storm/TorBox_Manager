@@ -42,6 +42,7 @@ from PyQt6.QtWidgets import (
     QMainWindow,
     QProgressBar,
     QPushButton,
+    QScrollArea,
     QSizePolicy,
     QSplitter,
     QSystemTrayIcon,
@@ -541,6 +542,10 @@ class MainWindow(QMainWindow):
         self._active_downloads: dict[str, list] = {}
         # Pending downloads waiting for a concurrency slot (FIFO)
         self._download_queue: list[tuple[str, dict]] = []
+        # Row keys waiting for a free concurrency slot to resume (same limit
+        # and drain mechanism as _download_queue, kept separate since resume
+        # needs to read from _paused_downloads rather than _row_items alone).
+        self._resume_queue: list[str] = []
         # Keys deleted by the user — suppressed for 2 poll cycles so they
         # don't reappear before TorBox finishes processing the delete.
         self._deleted_keys: set[str] = set()
@@ -574,6 +579,11 @@ class MainWindow(QMainWindow):
         self._speed_timer.timeout.connect(self._update_speed_display)
         self._speed_timer.start()
         self._account_fetch_in_flight = False
+        # Path to open if the most recently shown tray balloon gets clicked.
+        # QSystemTrayIcon.messageClicked doesn't say which balloon was clicked,
+        # so this is a "most recent notification wins" simplification — same
+        # pattern already used for multi-file progress/pause display.
+        self._last_notification_path: str | None = None
         # All log lines stored as (level, formatted_string) for filter re-render
         self._log_lines: list[tuple[str, str]] = []
         # Watch folder state
@@ -817,7 +827,23 @@ class MainWindow(QMainWindow):
             }}
         """)
 
-        layout = QVBoxLayout(panel)
+        outer_layout = QVBoxLayout(panel)
+        outer_layout.setContentsMargins(0, 0, 0, 0)
+        outer_layout.setSpacing(0)
+
+        # ADD + QUEUE sections scroll independently of ACCOUNT/SETTINGS below —
+        # this list of buttons has grown release over release, and at the
+        # app's documented minimum window size (1000x600) it no longer fits
+        # in the ~496px available without either scrolling or clipping.
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setStyleSheet("QScrollArea { background: transparent; border: none; }")
+
+        scroll_content = QWidget()
+        scroll_content.setStyleSheet("background: transparent;")
+        layout = QVBoxLayout(scroll_content)
         layout.setContentsMargins(0, 10, 0, 0)
         layout.setSpacing(3)
 
@@ -859,10 +885,29 @@ class MainWindow(QMainWindow):
         retry_all_btn.clicked.connect(self._on_retry_all_failed)
         layout.addWidget(retry_all_btn)
 
+        pause_all_btn = QPushButton("⏸  Pause All")
+        pause_all_btn.setMinimumHeight(28)
+        pause_all_btn.clicked.connect(self._on_pause_all)
+        layout.addWidget(pause_all_btn)
+
+        resume_all_btn = QPushButton("▶  Resume All")
+        resume_all_btn.setMinimumHeight(28)
+        resume_all_btn.clicked.connect(self._on_resume_all)
+        layout.addWidget(resume_all_btn)
+
         layout.addStretch()
 
-        # ---- ACCOUNT ----
-        layout.addWidget(_section_label("  Account"))
+        scroll.setWidget(scroll_content)
+        outer_layout.addWidget(scroll, stretch=1)
+
+        # ---- ACCOUNT + SETTINGS — pinned below the scroll area, always visible ----
+        bottom = QWidget()
+        bottom.setStyleSheet(f"background-color: {COLOR_PANEL};")
+        bottom_layout = QVBoxLayout(bottom)
+        bottom_layout.setContentsMargins(0, 0, 0, 0)
+        bottom_layout.setSpacing(3)
+
+        bottom_layout.addWidget(_section_label("  Account"))
 
         account_box = QWidget()
         account_box.setStyleSheet("background: transparent;")
@@ -883,14 +928,23 @@ class MainWindow(QMainWindow):
         self._account_expiry_label.setWordWrap(True)
         account_layout.addWidget(self._account_expiry_label)
 
-        layout.addWidget(account_box)
+        self._account_usage_label = QLabel("")
+        self._account_usage_label.setStyleSheet(
+            f"color: {COLOR_TEXT_MUTED}; font-size: 8pt; background: transparent; border: none;"
+        )
+        self._account_usage_label.setWordWrap(True)
+        account_layout.addWidget(self._account_usage_label)
+
+        bottom_layout.addWidget(account_box)
 
         # ---- SETTINGS — differentiated bottom button ----
         settings_btn = QPushButton("⚙   Settings")
         settings_btn.setObjectName("settings_btn")
         settings_btn.setMinimumHeight(34)
         settings_btn.clicked.connect(self._on_settings)
-        layout.addWidget(settings_btn)
+        bottom_layout.addWidget(settings_btn)
+
+        outer_layout.addWidget(bottom)
 
         return panel
 
@@ -940,7 +994,7 @@ class MainWindow(QMainWindow):
         row.setSpacing(6)
 
         self._filter_input = QLineEdit()
-        self._filter_input.setPlaceholderText("Filter queue…")
+        self._filter_input.setPlaceholderText("Filter by name, type, or status…")
         self._filter_input.setMinimumHeight(24)
         self._filter_input.setStyleSheet(f"""
             QLineEdit {{
@@ -1330,6 +1384,14 @@ class MainWindow(QMainWindow):
         )
         menu.addAction(copy_name_action)
 
+        magnet_uri = item.get("magnet")
+        if source_type == "magnet" and magnet_uri:
+            copy_magnet_action = QAction("Copy Magnet Link", self)
+            copy_magnet_action.triggered.connect(
+                lambda: QApplication.clipboard().setText(magnet_uri)
+            )
+            menu.addAction(copy_magnet_action)
+
         if status == STATUS_READY:
             copy_link_action = QAction("Copy Download Link", self)
             copy_link_action.triggered.connect(
@@ -1491,16 +1553,20 @@ class MainWindow(QMainWindow):
         self._pool.start(worker)
 
     def _try_start_queued(self):
-        """Start pending downloads from the queue as concurrency slots free up."""
+        """Start pending downloads and resumes as concurrency slots free up."""
         max_dl = self.config.get("max_concurrent_downloads", DEFAULT_MAX_CONCURRENT_DL)
-        while self._download_queue:
+        while self._download_queue or self._resume_queue:
             if sum(self._downloading.values()) >= max_dl:
                 break
-            key, _ = self._download_queue.pop(0)
-            item = self._row_items.get(key)
-            if not item:
-                continue
-            self._start_download(key, item)
+            if self._download_queue:
+                key, _ = self._download_queue.pop(0)
+                item = self._row_items.get(key)
+                if not item:
+                    continue
+                self._start_download(key, item)
+            else:
+                key = self._resume_queue.pop(0)
+                self._dispatch_resume(key)
 
     def _update_poll_interval(self):
         """Switch to idle (slow) poll when minimised with no active downloads."""
@@ -1774,6 +1840,7 @@ class MainWindow(QMainWindow):
 
         self._tray.setContextMenu(menu)
         self._tray.activated.connect(self._on_tray_activated)
+        self._tray.messageClicked.connect(self._on_tray_message_clicked)
         self._tray.show()
 
     def _setup_timer(self):
@@ -1839,20 +1906,28 @@ class MainWindow(QMainWindow):
     def _on_add_magnet(self):
         dlg = AddMagnetDialog(self)
         if dlg.exec():
-            link = dlg.magnet_link()
-            if self._is_duplicate_magnet(link):
+            links = dlg.magnet_links()
+            duplicates = [l for l in links if self._is_duplicate_magnet(l)]
+            if duplicates:
+                n, total = len(duplicates), len(links)
                 reply = QMessageBox.question(
                     self,
-                    "Possible Duplicate",
-                    "This magnet link already appears to be in your queue.\n\n"
-                    "Add it anyway?",
+                    "Possible Duplicate" + ("s" if n > 1 else ""),
+                    f"{n} of the {total} magnet link(s) you pasted "
+                    f"{'are' if n > 1 else 'is'} already in your queue.\n\n"
+                    "Add everything anyway?",
                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 )
                 if reply != QMessageBox.StandardButton.Yes:
-                    return
+                    links = [l for l in links if l not in duplicates]
+
             api_key = self.config.get("api_key", "")
-            self._log(f"Adding magnet: {link[:60]}{'...' if len(link) > 60 else ''}")
-            self._submit_add(lambda: api.add_magnet(api_key, link), "magnet")
+            for link in links:
+                self._log(f"Adding magnet: {link[:60]}{'...' if len(link) > 60 else ''}")
+                self._submit_add(
+                    (lambda u: lambda: api.add_magnet(api_key, u))(link),
+                    "magnet"
+                )
 
     def _is_duplicate_magnet(self, link: str) -> bool:
         """
@@ -1979,6 +2054,26 @@ class MainWindow(QMainWindow):
         for key, item in candidates:
             self._start_download(key, item)
         self._log(f"Retrying {len(candidates)} failed download(s).")
+
+    def _on_pause_all(self):
+        """Pause every currently-active download."""
+        keys = list(self._downloading)
+        if not keys:
+            self._log("No active downloads to pause.", "INFO")
+            return
+        for key in keys:
+            self._pause_download(key)
+        self._log(f"Pausing {len(keys)} active download(s).")
+
+    def _on_resume_all(self):
+        """Resume every currently-paused download."""
+        keys = list(self._paused_downloads)
+        if not keys:
+            self._log("No paused downloads to resume.", "INFO")
+            return
+        for key in keys:
+            self._resume_download(key)
+        self._log(f"Resuming {len(keys)} paused download(s).")
 
     def _on_download_all(self):
         """Queue every Ready row for download, respecting the concurrency limit."""
@@ -2168,6 +2263,16 @@ class MainWindow(QMainWindow):
         expires = data.get("premium_expires_at") or data.get("plan_expires_at")
         self._account_expiry_label.setText(f"Expires: {_fmt_full_date(expires)}" if expires else "")
 
+        # Field name guessed from TorBox's typical /user/me shape — not verified
+        # against a live account, same caveat as the rest of this method.
+        usage = data.get("total_downloaded")
+        if usage is None:
+            usage = data.get("total_bytes_downloaded")
+        if isinstance(usage, (int, float)) and usage > 0:
+            self._account_usage_label.setText(f"Downloaded: {_fmt_size(usage)}")
+        else:
+            self._account_usage_label.setText("")
+
     # -----------------------------------------------------------------------
     # Polling
     # -----------------------------------------------------------------------
@@ -2191,14 +2296,26 @@ class MainWindow(QMainWindow):
         self._pool.start(worker)
 
     def _apply_filter(self, text: str = ""):
-        """Show/hide rows based on the filter bar text. Updates the count label."""
+        """
+        Show/hide rows based on the filter bar text. Updates the count label.
+
+        Matches against Name, Status, and Type (e.g. typing "error" or
+        "magnet" filters the queue) rather than Name alone — a lightweight
+        way to filter by category without a separate dropdown control.
+        """
         text = text.strip().lower()
         total   = self._table.rowCount()
         visible = 0
         for row in range(total):
-            item = self._table.item(row, COL_NAME)
-            name = item.text().lower() if item else ""
-            hide = bool(text) and text not in name
+            name_cell   = self._table.item(row, COL_NAME)
+            status_cell = self._table.item(row, COL_STATUS)
+            type_widget = self._table.cellWidget(row, COL_TYPE)
+            haystack = " ".join([
+                name_cell.text().lower() if name_cell else "",
+                status_cell.text().lower() if status_cell else "",
+                type_widget.text().lower() if isinstance(type_widget, QLabel) else "",
+            ])
+            hide = bool(text) and text not in haystack
             self._table.setRowHidden(row, hide)
             if not hide:
                 visible += 1
@@ -2523,6 +2640,7 @@ class MainWindow(QMainWindow):
 
         # A paused download has no future Resume path once its row is gone —
         # clean up the .part file rather than leaving it orphaned on disk.
+        self._resume_queue = [k for k in self._resume_queue if k != key]
         paused = self._paused_downloads.pop(key, None)
         if paused:
             try:
@@ -2900,7 +3018,28 @@ class MainWindow(QMainWindow):
             dl_btn.setEnabled(True)
 
     def _resume_download(self, key: str):
-        """Dispatch a new DownloadWorker that continues a paused .part file."""
+        """
+        Resume a paused download, respecting the concurrency limit.
+
+        Bypassing the limit here was a real gap: a lone Resume click could push
+        active workers past max_concurrent_downloads, and "Resume All" on a
+        handful of paused rows would blow straight through it. If there's no
+        free slot, the key goes on the same drain queue _try_start_queued()
+        already uses for fresh downloads.
+        """
+        if key not in self._paused_downloads:
+            return
+        max_dl = self.config.get("max_concurrent_downloads", DEFAULT_MAX_CONCURRENT_DL)
+        if sum(self._downloading.values()) >= max_dl:
+            if key not in self._resume_queue:
+                self._resume_queue.append(key)
+                name = self._row_items.get(key, {}).get("name", key)
+                self._log(f"Resume queued — waiting for a download slot: {name}")
+            return
+        self._dispatch_resume(key)
+
+    def _dispatch_resume(self, key: str):
+        """Actually dispatch a resumed DownloadWorker — caller has already cleared the concurrency check."""
         resume = self._paused_downloads.pop(key, None)
         item = self._row_items.get(key)
         if not resume or not item:
@@ -2918,6 +3057,7 @@ class MainWindow(QMainWindow):
 
     def _discard_paused_download(self, key: str):
         """Give up on a paused download — delete its .part file and reset the row."""
+        self._resume_queue = [k for k in self._resume_queue if k != key]
         resume = self._paused_downloads.pop(key, None)
         if not resume:
             return
@@ -3030,6 +3170,7 @@ class MainWindow(QMainWindow):
 
         # Tray notification — only if enabled in settings
         if self.config.get("tray_notifications", False):
+            self._last_notification_path = file_path
             self._tray.showMessage(
                 "Download complete",
                 fname,
@@ -3371,7 +3512,7 @@ class MainWindow(QMainWindow):
         # If the API call fails the row is gone but the item still exists on TorBox —
         # the next poll will bring it back. This is the least-surprising behaviour.
         self._deleted_keys.add(key)
-        self._remove_row(key)
+        self._remove_row(key)  # also clears _paused_downloads/_resume_queue for key
         self._download_queue = [(k, i) for k, i in self._download_queue if k != key]
         self._log(f"Deleting from TorBox: {name}")
 
@@ -3439,6 +3580,7 @@ class MainWindow(QMainWindow):
             event.ignore()
             self.hide()
             self._update_poll_interval()
+            self._last_notification_path = None  # this balloon has nothing to open on click
             self._tray.showMessage(
                 APP_NAME,
                 "Running in the system tray.",
@@ -3459,6 +3601,11 @@ class MainWindow(QMainWindow):
     def _on_tray_activated(self, reason):
         if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
             self._tray_show()
+
+    def _on_tray_message_clicked(self):
+        """Clicking a download-complete balloon opens that file's folder."""
+        if self._last_notification_path:
+            self._open_in_explorer(self._last_notification_path)
 
     def _tray_show(self):
         self.showNormal()

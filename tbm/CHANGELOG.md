@@ -2,6 +2,43 @@
 
 ---
 
+## v1.1.0 — 2026-08-06
+
+Additive feature round on top of v1.0.0 — no architecture changes, just rounding out
+what's there. Two full bug-sweep passes this cycle (up from one last time).
+
+### Features
+- **Multi-magnet paste** — Add Magnet now accepts multiple links at once, one per line,
+  matching Add Hoster Link's existing multi-line UX. A single combined prompt handles it
+  if any of the pasted links are already in your queue, rather than one popup per link.
+- **Pause All / Resume All** — left-panel buttons alongside Retry All Failed.
+- **Tray notification click-to-open** — clicking a "download complete" balloon opens that
+  file's folder in Explorer.
+- **Filter by type and status** — the queue filter bar now matches Type and Status text
+  too, not just Name (e.g. typing "error" or "magnet" filters the queue).
+- **Account bandwidth stats** — total downloaded shown in the Account panel, if TorBox's
+  API exposes it for your account.
+- **Settings export/import** — back up config.json (including your API key in plain text —
+  it's called out explicitly in the dialog) to a file and restore it on another machine.
+- **Copy Magnet Link** — right-click a magnet-added row to copy the original magnet URI,
+  separate from the existing "Copy Download Link" (TorBox's resolved URL).
+
+### Fixed (bug sweep #1 — new features)
+- **Resume bypassed the concurrency limit entirely.** `_resume_download` dispatched
+  straight to a new `DownloadWorker` regardless of `max_concurrent_downloads` — a single
+  Resume click could already push active workers past the limit, and "Resume All" on a
+  handful of paused rows made it obvious immediately. Resume now goes through the same
+  queue-and-drain mechanism `Download All` already used, via a new `_resume_queue`.
+
+### Fixed (bug sweep #2 — comprehensive pass)
+- **Left panel could overflow at the documented minimum window size (1000×600).** The
+  button list has grown release over release with no scroll area to absorb it; the two
+  new Pause All/Resume All buttons pushed the arithmetic over the ~496px actually available
+  at minimum size. The Add/Queue button list now scrolls independently, with the Account
+  panel and Settings button pinned below it so they're always reachable without scrolling.
+
+---
+
 ## v1.0.0 — 2026-08-06
 
 First stable release. Built directly on top of v0.7.5's security fix and bugfix sweep,

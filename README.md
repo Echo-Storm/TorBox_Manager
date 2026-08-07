@@ -60,24 +60,24 @@ When the app opens it'll ask for your **API key** and a **download folder**. Fil
 
 ## Everything it does
 
-- **Add anything** — magnet links, .torrent files, hoster URLs (1Fichier, Mega, Pixeldrain etc.), and .nzb files
+- **Add anything** — magnet links, .torrent files, hoster URLs (1Fichier, Mega, Pixeldrain etc.), and .nzb files; both Add Magnet and Add Hoster Link accept a batch pasted at once, one per line
 - **Unified queue** — everything in one table regardless of type, with live status, size, seeds, peers, ETA, and progress bars
-- **Sortable, filterable, multi-select** — click any column header to sort; search bar filters rows by name in real time; Ctrl/Shift-click rows for bulk Download, Delete, or Copy Links from the right-click menu
+- **Sortable, filterable, multi-select** — click any column header to sort; the search bar filters by name, type, or status all at once (try typing "error" or "magnet"); Ctrl/Shift-click rows for bulk Download, Delete, or Copy Links from the right-click menu
 - **Multi-file torrents** — pick exactly which files you want before downloading; one worker per file, all in parallel
-- **Pause, resume, and cancel** — stop a download and either pick it back up later from where it left off, or cancel it outright
+- **Pause, resume, and cancel** — stop a download and either pick it back up later from where it left off, or cancel it outright; Pause All / Resume All handle the whole queue at once
 - **Downloads to your folder** — streams directly to disk with a live progress bar and an aggregate speed/remaining-size readout; each item gets its own named subfolder automatically
 - **Auto-extract** — archives (.zip, .rar, .7z, .tar.*) are extracted on a background thread immediately after download, with path-traversal protection against malicious archives; optionally deletes the archive after extraction
 - **Watch folder** — drop .torrent or .nzb files into a folder and they get submitted to TorBox automatically, with a delete-after-submit option
 - **Download history** — every completed download is logged; the History tab shows them all newest-first with double-click to open in Explorer and right-click to copy the path
 - **Controlled downloads** — concurrency limit (default 3) keeps your connection usable; Download All (and bulk-selected downloads) warn first if there isn't enough free disk space, then queue the rest and drain as slots free up; Retry All Failed re-attempts every row that errored
-- **Right-click rows** — Copy Name, Copy Download Link, Open in Browser (hoster links), Pause/Resume/Cancel Download — right on the row
+- **Right-click rows** — Copy Name, Copy Magnet Link, Copy Download Link, Open in Browser (hoster links), Pause/Resume/Cancel Download — right on the row
 - **Keyboard shortcuts** — Delete to remove the current selection, Ctrl+A to select every row, F5 to refresh
-- **Multi-link hoster input** — paste a batch of hoster URLs at once, one per line
-- **Duplicate warning** — adding a magnet already in your queue asks first instead of silently double-submitting
-- **Account at a glance** — current plan and expiration shown in the left panel
+- **Duplicate warning** — adding a magnet already in your queue (or a batch containing one) asks first instead of silently double-submitting
+- **Account at a glance** — current plan, expiration, and total downloaded (if your account exposes it) shown in the left panel
+- **Settings export/import** — back up your whole configuration to a file and restore it on another machine
 - **Update notifications** — checks GitHub Releases silently on startup; a button appears in the status bar if a newer version is out
 - **Stays out of your way** — minimizes to the system tray, slows polling to 5-minute intervals when idle, and can launch automatically at Windows startup
-- **Tray notifications** — optional popup when a download finishes (off by default)
+- **Tray notifications** — optional popup when a download finishes (off by default); click it to jump straight to the file
 - **Remembers where you left it** — window position and size restored on every launch
 
 ---
@@ -118,6 +118,9 @@ That's a TorBox thing on some usenet items — it returns the internal hash befo
 **If I pause a download and close the app, can I resume it later?**
 The paused file stays on disk (as a `.part` file), but the app doesn't currently remember it was paused across a restart — on next launch the row just looks like a fresh Ready item. Clicking Download again will restart that file from scratch rather than resuming it. Persisting pause state across restarts is on the list for a future release; for now, resume before you close the app if you want to keep the partial progress.
 
+**How do I move my settings to another PC?**
+Settings → Export Settings... saves everything (including your API key in plain text, so keep the file safe) to a JSON file. On the new machine, open Settings → Import Settings... and pick that file — it writes straight to `config.json` and asks you to restart the app to pick it up.
+
 **Where's the log file?**
 `TorBox_Manager_Log.txt` next to the exe. It gets overwritten each launch so it only covers the current session. There's also an in-app log strip at the bottom of the window with an "errors only" filter.
 
@@ -133,6 +136,14 @@ These need optional packages — `rarfile` (+ unrar.exe or WinRAR in PATH for .r
 ---
 
 ## Version history
+
+**v1.1.0** — Feature round on top of v1.0.0: multi-magnet paste (Add Magnet now takes a
+batch, one per line, like Add Hoster Link), Pause All / Resume All, tray notification
+click-to-open, filtering by type/status as well as name, account bandwidth stats, Settings
+export/import, and Copy Magnet Link. Two full bug-sweep passes this round caught a real one:
+Resume was bypassing the concurrency limit entirely (a single Resume click, or worse,
+Resume All, could push active downloads past your configured limit) — fixed by routing
+resume through the same queue-and-drain mechanism Download All already used.
 
 **v1.0.0** — First stable release. Real pause/resume for downloads (HTTP Range, with
 automatic fallback if a server doesn't support it), TorBox account/plan display, an

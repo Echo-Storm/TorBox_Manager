@@ -17,6 +17,7 @@
 # Styling mirrors EAC: dark background, #7cb342 green accents, Segoe UI.
 # A shared _apply_dialog_style() helper keeps it consistent across all dialogs.
 
+import json
 import os
 import webbrowser
 
@@ -33,6 +34,7 @@ from PyQt6.QtWidgets import (
     QHeaderView,
     QLabel,
     QLineEdit,
+    QMessageBox,
     QPushButton,
     QScrollArea,
     QSizePolicy,
@@ -43,6 +45,8 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
+from config import save_config
 
 from constants import (
     APP_NAME,
@@ -177,58 +181,6 @@ def _apply_dialog_style(dialog: QDialog):
     dialog.setFont(QFont(FONT_UI_FAMILY, FONT_UI_SIZE))
 
 
-def _make_paste_btn(target_input: QLineEdit) -> QPushButton:
-    """
-    Return a small Paste button that writes clipboard text into target_input.
-
-    Styled to sit flush against the input field without drawing attention.
-    Disabled when the clipboard contains no text.
-    """
-    btn = QPushButton("📋 Paste")
-    btn.setFixedHeight(30)
-    btn.setFixedWidth(72)
-    btn.setCursor(Qt.CursorShape.PointingHandCursor)
-    btn.setStyleSheet(f"""
-        QPushButton {{
-            background-color: transparent;
-            color: {COLOR_ACCENT};
-            border: 1px solid {COLOR_ACCENT_DIM};
-            border-radius: 3px;
-            font-size: 8pt;
-            padding: 0 6px;
-        }}
-        QPushButton:hover {{
-            background-color: {COLOR_ACCENT};
-            color: #000000;
-            border-color: {COLOR_ACCENT};
-        }}
-        QPushButton:pressed {{
-            background-color: {COLOR_ACCENT};
-            color: #000000;
-        }}
-        QPushButton:disabled {{
-            color: #333333;
-            border-color: {COLOR_BORDER};
-        }}
-    """)
-
-    def _do_paste():
-        cb   = QApplication.clipboard()
-        text = cb.text().strip()
-        if text:
-            target_input.setText(text)
-            target_input.setFocus()
-
-    def _update_state():
-        btn.setEnabled(bool(QApplication.clipboard().text().strip()))
-
-    btn.clicked.connect(_do_paste)
-    QApplication.clipboard().dataChanged.connect(_update_state)
-    _update_state()
-
-    return btn
-
-
 def _section_label(text: str) -> QLabel:
     """Return a small green uppercase section label, matching EAC's style."""
     label = QLabel(text.upper())
@@ -265,18 +217,20 @@ def _format_size(size_bytes) -> str:
 
 class AddMagnetDialog(QDialog):
     """
-    Single-field dialog for pasting a magnet:// link.
+    Multi-line dialog for pasting one or more magnet:// links (one per line).
 
     Usage:
         dlg = AddMagnetDialog(parent)
         if dlg.exec() == QDialog.DialogCode.Accepted:
-            magnet_link = dlg.magnet_link()
+            for link in dlg.magnet_links():
+                ...
     """
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Add Magnet Link")
         self.setMinimumWidth(520)
+        self.setMinimumHeight(220)
         self.setModal(True)
         _apply_dialog_style(self)
         self._build_ui()
@@ -286,19 +240,55 @@ class AddMagnetDialog(QDialog):
         layout.setSpacing(10)
         layout.setContentsMargins(16, 16, 16, 16)
 
-        layout.addWidget(_section_label("Magnet Link"))
+        layout.addWidget(_section_label("Magnet Link(s)"))
 
-        input_row = QHBoxLayout()
-        input_row.setSpacing(6)
-        self._input = QLineEdit()
-        self._input.setPlaceholderText("magnet:?xt=urn:btih:...")
-        self._input.setMinimumHeight(30)
-        input_row.addWidget(self._input)
-        input_row.addWidget(_make_paste_btn(self._input))
-        layout.addLayout(input_row)
+        paste_row = QHBoxLayout()
+        paste_row.setSpacing(6)
+        paste_row.addStretch()
+        self._paste_btn = QPushButton("📋 Paste")
+        self._paste_btn.setFixedHeight(26)
+        self._paste_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {COLOR_ACCENT};
+                color: #ffffff;
+                border: none;
+                border-radius: 4px;
+                padding: 0 10px;
+                font-size: 8pt;
+            }}
+            QPushButton:hover {{ background-color: {COLOR_ACCENT_DIM}; }}
+            QPushButton:disabled {{
+                background-color: {COLOR_BORDER};
+                color: {COLOR_TEXT_MUTED};
+            }}
+        """)
+        self._paste_btn.clicked.connect(self._paste_clipboard)
+        paste_row.addWidget(self._paste_btn)
+        layout.addLayout(paste_row)
+
+        self._input = QTextEdit()
+        self._input.setPlaceholderText(
+            "magnet:?xt=urn:btih:...\n"
+            "magnet:?xt=urn:btih:...\n"
+            "magnet:?xt=urn:btih:..."
+        )
+        self._input.setMinimumHeight(90)
+        self._input.setMaximumHeight(160)
+        self._input.setStyleSheet(f"""
+            QTextEdit {{
+                background-color: {COLOR_BG};
+                color: {COLOR_TEXT};
+                border: 1px solid {COLOR_BORDER_BRIGHT};
+                border-radius: 4px;
+                padding: 4px;
+                font-family: Consolas, monospace;
+                font-size: 8pt;
+            }}
+        """)
+        layout.addWidget(self._input)
 
         layout.addWidget(_muted_label(
-            "Paste a full magnet link. TorBox will queue it and begin caching."
+            "One magnet link per line. TorBox will queue each one and begin caching."
         ))
 
         self._error_label = QLabel("")
@@ -312,21 +302,47 @@ class AddMagnetDialog(QDialog):
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
 
-        self._input.returnPressed.connect(self._validate_and_accept)
+        QApplication.clipboard().dataChanged.connect(self._update_paste_btn)
+        self._update_paste_btn()
+
+    def _update_paste_btn(self):
+        has_text = bool(QApplication.clipboard().text().strip())
+        self._paste_btn.setEnabled(has_text)
+
+    def _paste_clipboard(self):
+        text = QApplication.clipboard().text().strip()
+        if not text:
+            return
+        current = self._input.toPlainText().strip()
+        if current:
+            self._input.setPlainText(current + "\n" + text)
+        else:
+            self._input.setPlainText(text)
+        cursor = self._input.textCursor()
+        cursor.movePosition(cursor.MoveOperation.End)
+        self._input.setTextCursor(cursor)
 
     def _validate_and_accept(self):
-        text = self._input.text().strip()
-        if not text:
-            self._error_label.setText("Please paste a magnet link.")
+        links = self.magnet_links()
+        if not links:
+            self._error_label.setText("Please paste at least one magnet link.")
             return
-        if not text.startswith("magnet:"):
-            self._error_label.setText("That doesn't look like a magnet link (should start with magnet:).")
+        bad = [l for l in links if not l.startswith("magnet:")]
+        if bad:
+            self._error_label.setText(
+                f"That doesn't look like a magnet link (should start with magnet:): "
+                f"{bad[0][:60]}{'...' if len(bad[0]) > 60 else ''}"
+            )
             return
         self.accept()
 
-    def magnet_link(self) -> str:
-        """Return the validated magnet link. Call only after exec() == Accepted."""
-        return self._input.text().strip()
+    def magnet_links(self) -> list[str]:
+        """Return the validated magnet links. Call only after exec() == Accepted."""
+        return [
+            line.strip()
+            for line in self._input.toPlainText().splitlines()
+            if line.strip()
+        ]
 
 
 # ---------------------------------------------------------------------------
@@ -533,6 +549,7 @@ class SettingsDialog(QDialog):
         self._build_watch_folder_section(layout)
         self._build_concurrency_section(layout)
         self._build_poll_section(layout)
+        self._build_backup_section(layout)
 
         layout.addStretch()
 
@@ -693,6 +710,79 @@ class SettingsDialog(QDialog):
             f"How often to check TorBox for status updates. "
             f"({MIN_POLL_INTERVAL_SEC}-{MAX_POLL_INTERVAL_SEC} seconds)"
         ))
+
+    def _build_backup_section(self, layout):
+        layout.addWidget(_section_label("Backup"))
+
+        backup_row = QHBoxLayout()
+        export_btn = QPushButton("Export Settings...")
+        export_btn.clicked.connect(self._export_settings)
+        backup_row.addWidget(export_btn)
+
+        import_btn = QPushButton("Import Settings...")
+        import_btn.clicked.connect(self._import_settings)
+        backup_row.addWidget(import_btn)
+        backup_row.addStretch()
+        layout.addLayout(backup_row)
+
+        layout.addWidget(_muted_label(
+            "Export saves everything on this screen — including your API key in plain "
+            "text — to a file you choose, for moving to another machine. Import replaces "
+            "config.json immediately and closes this dialog; restart the app afterward."
+        ))
+
+    def _export_settings(self):
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Export Settings", "torbox_manager_settings.json", "JSON Files (*.json)"
+        )
+        if not path:
+            return
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(self.get_config(), f, indent=4)
+        except OSError as exc:
+            QMessageBox.warning(self, "Export Failed", f"Could not write settings file:\n{exc}")
+            return
+        QMessageBox.information(self, "Export Complete", f"Settings exported to:\n{path}")
+
+    def _import_settings(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Import Settings", "", "JSON Files (*.json)"
+        )
+        if not path:
+            return
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                imported = json.load(f)
+        except (OSError, json.JSONDecodeError) as exc:
+            QMessageBox.warning(self, "Import Failed", f"Could not read settings file:\n{exc}")
+            return
+        if not isinstance(imported, dict):
+            QMessageBox.warning(self, "Import Failed", "That file doesn't look like a settings export.")
+            return
+
+        reply = QMessageBox.question(
+            self,
+            "Import Settings",
+            "Replace your current settings with the contents of this file?\n\n"
+            "TorBox Manager will need a restart afterward for everything to take effect.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        if not save_config(imported):
+            QMessageBox.warning(self, "Import Failed", "Could not write config.json.")
+            return
+
+        QMessageBox.information(
+            self, "Import Complete",
+            "Settings imported. Please restart TorBox Manager to apply them."
+        )
+        # Close without triggering the normal Save flow — get_config() would
+        # otherwise overwrite the just-imported file with this dialog's
+        # stale, pre-import widget values.
+        self.reject()
 
     def _toggle_key_visibility(self, checked: bool):
         mode = QLineEdit.EchoMode.Normal if checked else QLineEdit.EchoMode.Password

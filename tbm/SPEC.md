@@ -1,5 +1,5 @@
 # TorBox Manager — EchoStorm Edition
-# Project Specification v1.0.0
+# Project Specification v1.1.0
 
 ---
 
@@ -101,7 +101,7 @@ Runtime files (written next to exe or next to source):
 | `api.py` | HTTP requests, URL building, response parsing | Qt, UI, threads |
 | `worker.py` | QRunnable subclasses, signals, thread lifecycle | Direct UI calls |
 | `ui.py` | Widget layout, slot connections, display logic | requests, HTTP |
-| `dialogs.py` | Modal dialogs, input validation | API calls, workers |
+| `dialogs.py` | Modal dialogs, input validation | API calls, workers (does import `config.save_config()` directly for Settings export/import, v1.1.0 — reuses config.py's own path resolution rather than duplicating it) |
 | `config.py` | config.json read/write, default values | Qt, API |
 | `history.py` | download_history.json read/write | Qt, API |
 | `constants.py` | Static values only | Everything |
@@ -116,35 +116,43 @@ calls from a background thread.
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────┐
-│  v1.0.0  ────────── | TORBOX MANAGER | ────────── ECHOSTORM EDITION       │
+│  v1.1.0  ────────── | TORBOX MANAGER | ────────── ECHOSTORM EDITION       │
 ├──────────────────┬───────────────────────────────────────────────────────┤
 │  LEFT PANEL      │  [Queue] [History]          ← tab bar                 │
 │  (fixed 220px)   ├───────────────────────────────────────────────────────┤
-│                  │  [Filter queue…]  ✕  n items  ← filter bar (Queue tab)│
-│  ADD             ├───────────────────────────────────────────────────────┤
-│  [+ Magnet]      │  QUEUE TABLE (Queue tab)                              │
-│  [+ Torrent]     │  Name|Type|Status|Size|Seeds|Peers|Ratio|ETA|        │
-│  [+ Hoster Link] │  Added|Progress|Download|Delete                       │
-│  [+ NZB]         │                                                       │
-│                  │  ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ │
-│  QUEUE           │  HISTORY TABLE (History tab)                          │
-│  [Refresh Now]   │  [n downloads]  [Clear History]  ← header             │
-│  [Clear Done]    │  Time|Name|File|Type|Size                             │
-│  [Clear All]     │                                                       │
-│  [Retry Failed]  │                                                       │
-│                  ├───────────────────────────────────────────────────────┤
-│  ACCOUNT         │  LOG  [errors only]                                   │
-│  Plan: Pro       │  HH:MM:SS [INFO] ...                                  │
-│  Expires: ...    │  HH:MM:SS [ERROR] ...                                 │
-│  ⚙ Settings      ├───────────────────────────────────────────────────────┤
-│                  │  ● status  [⇊ N downloading·speed·left]  [⬆ update]  │
-│                  │  [⬇ Download All] | ♥ donate                          │
+│  ┌─scrollable──┐ │  [Filter by name/type/status…]  ✕  n items  ← filter  │
+│  │ ADD         │ ├───────────────────────────────────────────────────────┤
+│  │ [+ Magnet]  │ │  QUEUE TABLE (Queue tab)                              │
+│  │ [+ Torrent] │ │  Name|Type|Status|Size|Seeds|Peers|Ratio|ETA|        │
+│  │ [+ Hoster]  │ │  Added|Progress|Download|Delete                       │
+│  │ [+ NZB]     │ │                                                       │
+│  │             │ │  ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ │
+│  │ QUEUE       │ │  HISTORY TABLE (History tab)                          │
+│  │ [Refresh]   │ │  [n downloads]  [Clear History]  ← header             │
+│  │ [Clear Done]│ │  Time|Name|File|Type|Size                             │
+│  │ [Clear All] │ │                                                       │
+│  │ [Retry All] │ │                                                       │
+│  │ [Pause All] │ ├───────────────────────────────────────────────────────┤
+│  │ [Resume All]│ │  LOG  [errors only]                                   │
+│  └─────────────┘ │  HH:MM:SS [INFO] ...                                  │
+│  ACCOUNT (pinned)│  HH:MM:SS [ERROR] ...                                 │
+│  Plan: Pro       ├───────────────────────────────────────────────────────┤
+│  Expires: ...    │  ● status  [⇊ N downloading·speed·left]  [⬆ update]  │
+│  Downloaded: ... │  [⬇ Download All] | ♥ donate                          │
+│  ⚙ Settings      │                                                       │
 └──────────────────┴───────────────────────────────────────────────────────┘
 ```
 
 Right content area (tabs + log + status bar) is framed by a continuous 2px vertical rule
 on the right edge, with 12px gap to the window edge. Status bar is a plain QWidget in the
 layout, not `QMainWindow.setStatusBar()`, so the border runs through it uninterrupted.
+
+Left panel: the ADD/QUEUE button list scrolls independently inside a `QScrollArea`
+(`setFocusPolicy`/frame hidden to look seamless); ACCOUNT and the Settings button are
+pinned below it, outside the scroll area, so they're always reachable without scrolling.
+Added in v1.1.0 after the button list grew past the ~496px actually available at the
+documented minimum window size (1000×600) with no scrolling — see the Concurrency section
+for why two more buttons (Pause All / Resume All) tipped it over.
 
 ---
 
@@ -170,7 +178,13 @@ inside a multi-row selection shows a bulk menu — "Download Selected (N)", "Cop
 Links (N)" (Ready rows only), "Delete Selected (N)" — instead of the single-item menu;
 right-clicking outside the selection acts on just that row. The single-row menu additionally
 shows "Pause Download" / "Cancel Download" while a row is actively downloading, or "Resume
-Download" / "Discard Paused Download" while it's locally paused.
+Download" / "Discard Paused Download" while it's locally paused, and "Copy Magnet Link"
+(the original magnet URI, distinct from "Copy Download Link"'s TorBox-resolved URL) for
+rows added from a magnet.
+
+The queue filter bar matches Name, Type, and Status text together (e.g. typing "error" or
+"magnet" filters the queue) rather than Name alone — a lightweight way to filter by category
+without a separate dropdown control.
 
 Keyboard shortcuts (window-scoped, active only while the Queue tab is showing): `Delete`
 removes the current selection (single delete or bulk delete), `Ctrl+A` selects every row,
@@ -256,9 +270,14 @@ All workers communicate back to the main thread via Qt signals only.
 ### Concurrency
 - `_downloading: dict[str, int]` — maps row_key to count of active workers
 - `_active_downloads: dict[str, list]` — live `DownloadWorker` instances per row_key, so an
-  in-progress download can be cancelled (right-click row → "Cancel Download")
-- `_download_queue: list[tuple[str, dict]]` — FIFO queue for pending downloads
-- On each worker finish/error/cancel: decrement count; drain queue up to the concurrency limit
+  in-progress download can be cancelled or paused (right-click row → "Cancel Download" /
+  "Pause Download"; left panel → "Pause All" pauses every currently-active download)
+- `_download_queue: list[tuple[str, dict]]` — FIFO queue for pending fresh downloads
+- `_resume_queue: list[str]` — FIFO queue for pending resumes (row keys only — resume
+  metadata is already in `_paused_downloads`). Added in v1.1.0; see the bug note below.
+- On each worker finish/error/cancel/paused: decrement count; `_try_start_queued()` then
+  drains `_download_queue` first, then `_resume_queue`, both gated by the same
+  `max_concurrent_downloads` check in one loop.
 - "Download All" and the multi-select "Download Selected" bulk action both estimate total
   size against `shutil.disk_usage(download_dir).free` first and confirm with the user before
   proceeding if there isn't enough room (best-effort — skipped if the download dir isn't set)
@@ -268,21 +287,34 @@ All workers communicate back to the main thread via Qt signals only.
   a key whenever a fresh attempt (including a resume) is dispatched for it, or its row is
   removed.
 
+**Bug fixed in v1.1.0's bug sweep #1**: `_resume_download` originally dispatched a resumed
+`DownloadWorker` unconditionally, bypassing `max_concurrent_downloads` entirely — a single
+Resume click could already push active workers past the limit, and "Resume All" on a
+handful of paused rows made the gap obvious immediately (all of them would start at once
+regardless of the configured limit). Resume now checks the same concurrency gate
+`_start_download` does; if there's no free slot it appends the key to `_resume_queue`
+instead of dispatching, and `_try_start_queued()` drains it exactly like `_download_queue`
+as slots free up.
+
 ---
 
 ## Add Inputs
 
 | Button | Dialog | Validation |
 |--------|--------|-----------|
-| + Magnet | Text input + Paste button | `magnet:` prefix |
+| + Magnet | Multi-line text input + Paste | `magnet:` prefix; one link per line |
 | + Torrent | QFileDialog `.torrent` | File must exist |
 | + Hoster Link | Multi-line text input + Paste | `http(s)://` prefix; one URL per line |
 | + NZB | QFileDialog `.nzb` | File must exist |
 
-All four run on a background `AddWorker` thread — the UI is never blocked.
+All four run on a background `AddWorker` thread — the UI is never blocked. Add Magnet and
+Add Hoster Link both accept multiple entries at once (one per line) via the same
+`QTextEdit`-based dialog pattern — `AddMagnetDialog` was converted from a single-line
+`QLineEdit` to match `AddLinkDialog` in v1.1.0.
 
-Adding a magnet link already present in the queue (matched via TorBox's own `magnet` field
-on the item) prompts a "possible duplicate — add anyway?" confirmation first. Hoster links
+Adding one or more magnet links already present in the queue (matched via TorBox's own
+`magnet` field on the item) prompts a single combined "N of M already in your queue — add
+everything anyway?" confirmation, rather than one popup per duplicate link. Hoster links
 aren't checked — TorBox doesn't echo back a stable field to compare the original URL against.
 
 ---
@@ -332,16 +364,51 @@ defaults on and archive contents are untrusted (arbitrary torrents/hosters).
 
 ## Account Info
 
-- Left panel, above the Settings button: two labels showing TorBox plan and expiration
+- Left panel, above the Settings button: three labels showing TorBox plan, expiration, and
+  (v1.1.0) total downloaded if the API exposes it
 - Fetched via `UserInfoWorker` hitting `/user/me` — 1.5 s after startup, and again after
   Settings is saved (in case the API key changed)
 - `_account_fetch_in_flight` guard prevents two overlapping fetches from returning out of
   order and leaving the panel showing the stale one
 - **Every field is treated as optional.** The exact `/user/me` response shape is TorBox's
-  documented/typical fields (`plan`, `premium_expires_at`) but has not been verified
-  against a live account of every plan tier — an unrecognized `plan` value falls back to
-  `"Plan {n}"` rather than guessing, and a missing expiration just leaves that line blank.
-  Failure is silent (logged only) — the panel just keeps showing its placeholder.
+  documented/typical fields (`plan`, `premium_expires_at`, `total_downloaded`) but has not
+  been verified against a live account of every plan tier — an unrecognized `plan` value
+  falls back to `"Plan {n}"` rather than guessing, a missing expiration just leaves that
+  line blank, and the bandwidth line only shows if a recognized numeric field is present
+  and greater than zero. Failure is silent (logged only) — the panel just keeps showing its
+  placeholders.
+
+---
+
+## Tray Notifications
+
+- Optional (`tray_notifications` config key, off by default) popup when a download completes
+- v1.1.0: clicking the balloon opens that file's folder in Explorer (`messageClicked` signal
+  → `_open_in_explorer`)
+- `QSystemTrayIcon.messageClicked` doesn't say which balloon was clicked, only that *a*
+  balloon was — `_last_notification_path` tracks whichever notification was shown most
+  recently, same "most recent wins" simplification already used for multi-file progress
+  display. Explicitly cleared to `None` before the (path-less) "running in the tray"
+  minimize notice, so clicking that one doesn't try to open a stale previous download.
+
+---
+
+## Settings Backup
+
+- Settings dialog, "Backup" section (bottom of the scrollable content): "Export Settings..."
+  / "Import Settings..." buttons, added in v1.1.0
+- **Export** writes `get_config()` — the dialog's current live widget state, not the
+  snapshot taken at open time — as JSON to a user-chosen path via `QFileDialog`. Includes
+  the API key in plain text; called out explicitly in the dialog's own muted-label copy,
+  not just this doc.
+- **Import** reads a JSON file, confirms with the user, then writes it straight to
+  `config.json` via `config.save_config()` and calls `self.reject()` to close the dialog
+  immediately — deliberately skipping the normal Save flow. If Import didn't close the
+  dialog, a subsequent Save click would silently overwrite the just-imported file with the
+  dialog's stale, pre-import widget values. The tradeoff: importing doesn't live-update the
+  currently open session, so the user is told to restart the app to pick it up.
+- Both directions go through `config.py`'s own path-resolution logic (`save_config()`)
+  rather than duplicating the frozen/unfrozen `sys.executable` pattern in `dialogs.py`.
 
 ---
 
@@ -435,3 +502,8 @@ short version: `venv\Scripts\python -m unittest discover -s tests -v` from `tbm/
 Registry-touching code (`_apply_startup_setting`) is exercised for real only on the
 safe, idempotent "disabled" path; the "enabled" path is verified against a mocked `winreg`
 so the suite never leaves a startup entry behind on the machine that runs it.
+
+`test_v11_features.py` (v1.1.0) covers multi-magnet paste, Pause All/Resume All (including
+a regression test for the concurrency-bypass bug described above), tray notification
+click-to-open, type/status filtering, account bandwidth stats, and settings export/import —
+same fakes-not-real-network-calls approach as the rest of the suite.
